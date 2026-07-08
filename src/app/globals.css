@@ -1,0 +1,178 @@
+@import "tailwindcss";
+
+/*
+  Design tokens for Event Deposits.
+  Direction: a paper "claim ticket" you'd get handed at a real pop-up market.
+  Ink-on-paper by day, warm dusk glow for the marketing/hero moment.
+  The signature element is the perforated ticket card used for the event
+  summary and the attendee's confirmation, torn-edge notches and all.
+*/
+
+:root {
+  --paper: #faf7f0;
+  --paper-dim: #f0ebdf;
+  --ink: #1c1b17;
+  --ink-soft: #5b574c;
+  --dusk: #1f2a33;
+  --dusk-soft: #34424d;
+  --marigold: #d99a1b;
+  --marigold-dark: #a9740f;
+  --clay: #b04632;
+  --line: #ddd5c2;
+
+  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-dim: var(--paper-dim);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-dusk: var(--dusk);
+  --color-dusk-soft: var(--dusk-soft);
+  --color-marigold: var(--marigold);
+  --color-marigold-dark: var(--marigold-dark);
+  --color-clay: var(--clay);
+  --color-line: var(--line);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+/* Eyebrow label styling used above headings and section titles */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--marigold-dark);
+}
+
+/* Base card used across dashboard/organizer surfaces */
+.panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+/* Primary and secondary button styles, shared everywhere */
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 10px;
+  font-weight: 600;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.btn-primary:hover {
+  background: var(--dusk);
+}
+.btn-primary:active {
+  transform: scale(0.98);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+}
+
+.btn-marigold {
+  background: var(--marigold);
+  color: var(--ink);
+  border-radius: 10px;
+  font-weight: 700;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.btn-marigold:hover {
+  background: var(--marigold-dark);
+  color: var(--paper);
+}
+.btn-marigold:active {
+  transform: scale(0.98);
+}
+.btn-marigold:disabled {
+  opacity: 0.5;
+}
+
+.field {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  transition: border-color 0.12s ease;
+}
+.field:focus-within {
+  border-color: var(--marigold-dark);
+  outline: 2px solid transparent;
+}
+.field:focus {
+  border-color: var(--marigold-dark);
+}
+
+/*
+  The ticket card: the signature element. A perforated divider is faked
+  with a dashed border plus two "punched" circles that match the page
+  background, so it reads as torn stock rather than a plain rounded box.
+*/
+.ticket {
+  position: relative;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: visible;
+}
+
+.ticket-divider {
+  position: relative;
+  border-top: 2px dashed var(--line);
+  margin: 0 1.25rem;
+}
+
+.ticket-divider::before,
+.ticket-divider::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  width: 20px;
+  height: 20px;
+  background: var(--paper);
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.ticket-divider::before {
+  left: -1.45rem;
+}
+
+.ticket-divider::after {
+  right: -1.45rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
