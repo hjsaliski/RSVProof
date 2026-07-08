@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-export async function POST(request) {
+export async function GET(request) {
   const authHeader = request.headers.get('authorization');
   if (!authHeader) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -11,22 +11,6 @@ export async function POST(request) {
   const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
   if (userError || !userData?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { eventId, eventbriteEventId } = await request.json();
-  if (!eventId || !eventbriteEventId) {
-    return NextResponse.json({ error: 'Missing eventId or eventbriteEventId' }, { status: 400 });
-  }
-
-  const { data: event, error: eventError } = await supabaseAdmin
-    .from('events')
-    .select('*')
-    .eq('id', eventId)
-    .eq('organizer_id', userData.user.id)
-    .single();
-
-  if (eventError || !event) {
-    return NextResponse.json({ error: 'Event not found' }, { status: 404 });
   }
 
   const { data: connection } = await supabaseAdmin
@@ -39,36 +23,49 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Eventbrite is not connected' }, { status: 400 });
   }
 
-  const webhookRes = await fetch('https://www.eventbriteapi.com/v3/webhooks/', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${connection.access_token}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      endpoint_url: `${new URL(request.url).origin}/api/eventbrite/webhook`,
-      actions: 'order.placed',
-      event_id: eventbriteEventId,
-    }),
+  const orgsRes = await fetch('https://www.eventbriteapi.com/v3/users/me/organizations/', {
+    headers: { Authorization: `Bearer ${connection.access_token}` },
   });
 
-  if (!webhookRes.ok) {
-    const errJson = await webhookRes.json().catch(() => ({}));
-    console.error('Eventbrite webhook registration failed:', errJson);
+  if (!orgsRes.ok) {
+    const errJson = await orgsRes.json().catch(() => ({}));
+    console.error('Eventbrite organizations fetch failed:', errJson);
     return NextResponse.json(
-      { error: errJson.error_description || errJson.error || 'Could not register the Eventbrite webhook' },
+      { error: errJson.error_description || errJson.error || 'Could not load your Eventbrite organization' },
       { status: 502 }
     );
   }
 
-  const { error: updateError } = await supabaseAdmin
-    .from('events')
-    .update({ eventbrite_event_id: eventbriteEventId, source: 'eventbrite' })
-    .eq('id', eventId);
+  const orgsJson = await orgsRes.json();
+  const organizations = orgsJson.organizations || [];
 
-  if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+  if (organizations.length === 0) {
+    return NextResponse.json({ error: 'No Eventbrite organization found on this account' }, { status: 400 });
   }
 
-  return NextResponse.json({ success: true });
+  const allEvents = [];
+  for (const org of organizations) {
+    const ebRes = await fetch(
+      `https://www.eventbriteapi.com/v3/organizations/${org.id}/events/?order_by=start_desc`,
+      { headers: { Authorization: `Bearer ${connection.access_token}` } }
+    );
+
+    if (!ebRes.ok) {
+      const errJson = await ebRes.json().catch(() => ({}));
+      console.error('Eventbrite events fetch failed for org', org.id, errJson);
+      continue;
+    }
+
+    const ebJson = await ebRes.json();
+    allEvents.push(...(ebJson.events || []));
+  }
+
+  const events = allEvents.map((e) => ({
+    id: e.id,
+    name: e.name?.text || 'Untitled event',
+    startDate: e.start?.local,
+    url: e.url,
+  }));
+
+  return NextResponse.json({ events });
 }
