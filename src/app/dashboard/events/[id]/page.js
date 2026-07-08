@@ -16,6 +16,12 @@ export default function EventDetailPage() {
   const [charging, setCharging] = useState(false);
   const [reminderResult, setReminderResult] = useState(null);
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [eventbriteConnected, setEventbriteConnected] = useState(false);
+  const [eventbriteEvents, setEventbriteEvents] = useState([]);
+  const [loadingEbEvents, setLoadingEbEvents] = useState(false);
+  const [linkingId, setLinkingId] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState('');
 
   useEffect(() => {
     setSiteUrl(window.location.origin);
@@ -44,7 +50,55 @@ export default function EventDetailPage() {
       .order('created_at', { ascending: true });
     setAttendees(attendeeData || []);
 
+    const { data: connection } = await supabase
+      .from('eventbrite_connections')
+      .select('organizer_id')
+      .eq('organizer_id', user.id)
+      .single();
+    setEventbriteConnected(!!connection);
+
     setLoading(false);
+  }
+
+  async function loadEventbriteEvents() {
+    setLoadingEbEvents(true);
+    setLinkError('');
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/eventbrite/events', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const json = await res.json();
+    setLoadingEbEvents(false);
+
+    if (json.error) {
+      setLinkError(json.error);
+      return;
+    }
+    setEventbriteEvents(json.events || []);
+  }
+
+  async function linkEventbrite() {
+    if (!linkingId) return;
+    setLinking(true);
+    setLinkError('');
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/eventbrite/link', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ eventId: id, eventbriteEventId: linkingId }),
+    });
+    const json = await res.json();
+    setLinking(false);
+
+    if (json.error) {
+      setLinkError(json.error);
+      return;
+    }
+    await load();
   }
 
   async function toggleDeposits() {
@@ -190,6 +244,59 @@ export default function EventDetailPage() {
         <p className="text-xs text-ink-soft border-t border-line pt-3">
           Anyone not checked in by the cutoff will be charged the deposit amount.
         </p>
+      </div>
+
+      <div className="panel p-5 mb-5 space-y-3">
+        <h2 className="font-medium">Eventbrite</h2>
+        {event.eventbrite_event_id ? (
+          <p className="text-sm text-marigold-dark">
+            Linked. New RSVPs on Eventbrite will automatically get invited to
+            secure a deposit here.
+          </p>
+        ) : !eventbriteConnected ? (
+          <p className="text-sm text-ink-soft">
+            Connect your Eventbrite account first, from{' '}
+            <a href="/dashboard/connect" className="underline">Connect a platform</a>,
+            then come back here to link this specific event.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-ink-soft">
+              Link this event to one of your Eventbrite events, so new RSVPs
+              there automatically get invited to secure a deposit here.
+            </p>
+            {eventbriteEvents.length === 0 ? (
+              <button
+                onClick={loadEventbriteEvents}
+                disabled={loadingEbEvents}
+                className="text-sm px-4 py-2 rounded-lg border border-line text-ink-soft disabled:opacity-50"
+              >
+                {loadingEbEvents ? 'Loading...' : 'Load my Eventbrite events'}
+              </button>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={linkingId}
+                  onChange={(e) => setLinkingId(e.target.value)}
+                  className="field px-3 py-2 text-sm"
+                >
+                  <option value="">Select an Eventbrite event</option>
+                  {eventbriteEvents.map((e) => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={linkEventbrite}
+                  disabled={!linkingId || linking}
+                  className="btn-marigold text-sm px-4 py-2 disabled:opacity-50"
+                >
+                  {linking ? 'Linking...' : 'Link'}
+                </button>
+              </div>
+            )}
+            {linkError && <p className="text-clay text-sm">{linkError}</p>}
+          </div>
+        )}
       </div>
 
       <div className="panel p-5 mb-5 space-y-3">

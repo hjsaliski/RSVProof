@@ -7,7 +7,7 @@ import { resend } from '@/lib/resend';
 
 export async function POST(request) {
   const body = await request.json();
-  const { eventId, setupIntentId, name, email, phone } = body;
+  const { eventId, setupIntentId, name, email, phone, inviteToken } = body;
 
   if (!eventId || !setupIntentId || !name) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -20,31 +20,54 @@ export async function POST(request) {
   }
 
   const qrToken = randomBytes(16).toString('hex');
+  let data, error;
 
-  const { data, error } = await supabaseAdmin
-    .from('attendees')
-    .insert({
-      event_id: eventId,
-      name,
-      email: email || null,
-      phone: phone || null,
-      stripe_customer_id: setupIntent.customer,
-      stripe_payment_method_id: setupIntent.payment_method,
-      qr_token: qrToken,
-      charge_status: 'pending',
-    })
-    .select()
-    .single();
+  if (inviteToken) {
+    // This attendee already exists as an 'invited' row, created by the
+    // Eventbrite webhook. Complete that row instead of creating a second
+    // one for the same person.
+    ({ data, error } = await supabaseAdmin
+      .from('attendees')
+      .update({
+        name,
+        phone: phone || null,
+        stripe_customer_id: setupIntent.customer,
+        stripe_payment_method_id: setupIntent.payment_method,
+        qr_token: qrToken,
+        charge_status: 'pending',
+      })
+      .eq('invite_token', inviteToken)
+      .eq('event_id', eventId)
+      .select()
+      .single());
+  } else {
+    ({ data, error } = await supabaseAdmin
+      .from('attendees')
+      .insert({
+        event_id: eventId,
+        name,
+        email: email || null,
+        phone: phone || null,
+        stripe_customer_id: setupIntent.customer,
+        stripe_payment_method_id: setupIntent.payment_method,
+        qr_token: qrToken,
+        charge_status: 'pending',
+      })
+      .select()
+      .single());
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const attendeeEmail = email || data.email;
+
   // Email the QR code as a backup to the on-screen version, so the attendee
   // still has it even if they close the tab or lose signal at the door.
   // This is best-effort: a failed email should never block the signup
   // itself, since the on-screen QR code already works on its own.
-  if (email && resend) {
+  if (attendeeEmail && resend) {
     try {
       const { data: event } = await supabaseAdmin
         .from('events')
@@ -63,7 +86,7 @@ export async function POST(request) {
 
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-          to: email,
+          to: attendeeEmail,
           subject: `You're confirmed: ${event.name}`,
           html: `
             <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
@@ -111,7 +134,7 @@ export async function POST(request) {
                     <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">New signup</p>
                     <h1 style="font-size: 20px; margin: 0 0 8px;">${event.name}</h1>
                     <p style="font-size: 14px; margin: 0 0 4px;"><strong>${name}</strong></p>
-                    <p style="font-size: 14px; color: #5b574c; margin: 0 0 16px;">${email}${phone ? ` &middot; ${phone}` : ''}</p>
+                    <p style="font-size: 14px; color: #5b574c; margin: 0 0 16px;">${attendeeEmail}${phone ? ` &middot; ${phone}` : ''}</p>
                     <p style="font-size: 13px; color: #5b574c;">They've saved a card for the ${depositDisplay} hold. Nothing's charged unless they don't check in.</p>
                   </div>
                 `,
