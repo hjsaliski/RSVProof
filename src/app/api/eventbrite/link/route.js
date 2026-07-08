@@ -57,10 +57,13 @@ export async function POST(request) {
   });
 
   if (!webhookRes.ok) {
-    const errJson = await webhookRes.json().catch(() => ({}));
-    console.error('Eventbrite webhook registration failed:', errJson);
-    return NextResponse.json({ error: 'Could not register the Eventbrite webhook' }, { status: 502 });
-  }
+      const errJson = await webhookRes.json().catch(() => ({}));
+      console.error('Eventbrite webhook registration failed:', errJson);
+      return NextResponse.json(
+        { error: errJson.error_description || errJson.error || 'Could not register the Eventbrite webhook' },
+        { status: 502 }
+      );
+    }
 
   const { error: updateError } = await supabaseAdmin
     .from('events')

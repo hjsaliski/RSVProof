@@ -63,18 +63,24 @@ export default function EventDetailPage() {
   async function loadEventbriteEvents() {
     setLoadingEbEvents(true);
     setLinkError('');
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/eventbrite/events', {
-      headers: { Authorization: `Bearer ${session.access_token}` },
-    });
-    const json = await res.json();
-    setLoadingEbEvents(false);
 
-    if (json.error) {
-      setLinkError(json.error);
-      return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/eventbrite/events', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const json = await res.json();
+
+      if (json.error) {
+        setLinkError(json.error);
+      } else {
+        setEventbriteEvents(json.events || []);
+      }
+    } catch (err) {
+      setLinkError(`Request failed: ${err.message}`);
     }
-    setEventbriteEvents(json.events || []);
+
+    setLoadingEbEvents(false);
   }
 
   async function linkEventbrite() {
@@ -82,23 +88,28 @@ export default function EventDetailPage() {
     setLinking(true);
     setLinkError('');
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const res = await fetch('/api/eventbrite/link', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ eventId: id, eventbriteEventId: linkingId }),
-    });
-    const json = await res.json();
-    setLinking(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/eventbrite/link', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ eventId: id, eventbriteEventId: linkingId }),
+      });
+      const json = await res.json();
 
-    if (json.error) {
-      setLinkError(json.error);
-      return;
+      if (json.error) {
+        setLinkError(json.error);
+      } else {
+        await load();
+      }
+    } catch (err) {
+      setLinkError(`Request failed: ${err.message}`);
     }
-    await load();
+
+    setLinking(false);
   }
 
   async function toggleDeposits() {
