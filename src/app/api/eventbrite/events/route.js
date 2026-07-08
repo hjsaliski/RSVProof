@@ -24,12 +24,17 @@ export async function GET(request) {
   }
 
   const ebRes = await fetch(
-    'https://www.eventbriteapi.com/v3/users/me/events/?status=live,started&order_by=start_desc',
+    'https://www.eventbriteapi.com/v3/users/me/events/?order_by=start_desc',
     { headers: { Authorization: `Bearer ${connection.access_token}` } }
   );
 
   if (!ebRes.ok) {
-    return NextResponse.json({ error: 'Could not load Eventbrite events' }, { status: 502 });
+    const errJson = await ebRes.json().catch(() => ({}));
+    console.error('Eventbrite events fetch failed:', errJson);
+    return NextResponse.json(
+      { error: errJson.error_description || errJson.error || 'Could not load Eventbrite events' },
+      { status: 502 }
+    );
   }
 
   const ebJson = await ebRes.json();
