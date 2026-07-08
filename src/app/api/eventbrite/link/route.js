@@ -18,8 +18,6 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Missing eventId or eventbriteEventId' }, { status: 400 });
   }
 
-  // Confirm this organizer actually owns the RSVproof event they're
-  // trying to link, same ownership check used everywhere else.
   const { data: event, error: eventError } = await supabaseAdmin
     .from('events')
     .select('*')
@@ -41,9 +39,27 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Eventbrite is not connected' }, { status: 400 });
   }
 
-  // Register a webhook scoped to this specific Eventbrite event, so a
-  // new RSVP there notifies our webhook endpoint automatically.
-  const webhookRes = await fetch('https://www.eventbriteapi.com/v3/webhooks/', {
+  const orgsRes = await fetch('https://www.eventbriteapi.com/v3/users/me/organizations/', {
+    headers: { Authorization: `Bearer ${connection.access_token}` },
+  });
+
+  if (!orgsRes.ok) {
+    const errJson = await orgsRes.json().catch(() => ({}));
+    console.error('Eventbrite organizations fetch failed:', errJson);
+    return NextResponse.json(
+      { error: errJson.error_description || errJson.error || 'Could not load your Eventbrite organization' },
+      { status: 502 }
+    );
+  }
+
+  const orgsJson = await orgsRes.json();
+  const organizationId = orgsJson.organizations?.[0]?.id;
+
+  if (!organizationId) {
+    return NextResponse.json({ error: 'No Eventbrite organization found on this account' }, { status: 400 });
+  }
+
+  const webhookRes = await fetch(`https://www.eventbriteapi.com/v3/organizations/${organizationId}/webhooks/`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${connection.access_token}`,
@@ -57,13 +73,13 @@ export async function POST(request) {
   });
 
   if (!webhookRes.ok) {
-      const errJson = await webhookRes.json().catch(() => ({}));
-      console.error('Eventbrite webhook registration failed:', errJson);
-      return NextResponse.json(
-        { error: errJson.error_description || errJson.error || 'Could not register the Eventbrite webhook' },
-        { status: 502 }
-      );
-    }
+    const errJson = await webhookRes.json().catch(() => ({}));
+    console.error('Eventbrite webhook registration failed:', errJson);
+    return NextResponse.json(
+      { error: errJson.error_description || errJson.error || 'Could not register the Eventbrite webhook' },
+      { status: 502 }
+    );
+  }
 
   const { error: updateError } = await supabaseAdmin
     .from('events')
