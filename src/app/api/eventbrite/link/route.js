@@ -64,6 +64,11 @@ export async function POST(request) {
   // matching Eventbrite's own user_id from the webhook payload, but that
   // value turned out not to reliably match anything we had stored.
   // Embedding our own id here removes that guesswork entirely.
+  //
+  // Subscribed to order.refunded alongside order.placed so a cancellation
+  // on Eventbrite's side can sync back and release the attendee's deposit
+  // hold automatically, instead of leaving a cancelled attendee sitting at
+  // "pending" and getting charged as a no-show anyway.
   const webhookRes = await fetch(`https://www.eventbriteapi.com/v3/organizations/${organizationId}/webhooks/`, {
     method: 'POST',
     headers: {
@@ -72,7 +77,7 @@ export async function POST(request) {
     },
     body: new URLSearchParams({
       endpoint_url: `${new URL(request.url).origin}/api/eventbrite/webhook?rsvproofEventId=${event.id}`,
-      actions: 'order.placed',
+      actions: 'order.placed,order.refunded',
       event_id: eventbriteEventId,
     }),
   });

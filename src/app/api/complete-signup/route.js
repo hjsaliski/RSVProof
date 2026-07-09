@@ -20,6 +20,7 @@ export async function POST(request) {
   }
 
   const qrToken = randomBytes(16).toString('hex');
+  const cancelToken = randomBytes(16).toString('hex');
   let data, error;
 
   if (inviteToken) {
@@ -34,6 +35,7 @@ export async function POST(request) {
         stripe_customer_id: setupIntent.customer,
         stripe_payment_method_id: setupIntent.payment_method,
         qr_token: qrToken,
+        cancel_token: cancelToken,
         charge_status: 'pending',
       })
       .eq('invite_token', inviteToken)
@@ -51,6 +53,7 @@ export async function POST(request) {
         stripe_customer_id: setupIntent.customer,
         stripe_payment_method_id: setupIntent.payment_method,
         qr_token: qrToken,
+        cancel_token: cancelToken,
         charge_status: 'pending',
       })
       .select()
@@ -83,6 +86,10 @@ export async function POST(request) {
         });
         const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
         const eventDateDisplay = new Date(event.event_date).toLocaleString();
+        const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
+          ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
+          : '';
+        const cancelLink = `${siteUrl}/cancel/${cancelToken}`;
 
         await resend.emails.send({
           from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
@@ -100,6 +107,9 @@ export async function POST(request) {
                 checking in by the cutoff, and your card is charged ${depositDisplay}.
               </div>
               <p style="font-size: 13px; color: #5b574c;">Your check-in code is attached to this email.</p>
+              <p style="font-size: 12px; color: #a39d8c; margin-top: 20px;">
+                Can't make it? <a href="${cancelLink}" style="color: #a39d8c;">Cancel your deposit</a>
+              </p>
             </div>
           `,
           attachments: [

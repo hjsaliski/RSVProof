@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomBytes } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { resend } from '@/lib/resend';
+import { cancelAttendeeDeposit } from '@/lib/cancelDeposit';
 
 // Eventbrite's webhook payload is intentionally thin, just enough to tell
 // us something happened and where to fetch the real details:
@@ -17,7 +18,10 @@ export async function POST(request) {
   const rsvproofEventId = searchParams.get('rsvproofEventId');
 
   const body = await request.json().catch(() => null);
-  if (!rsvproofEventId || !body?.api_url || body?.config?.action !== 'order.placed') {
+  const action = body?.config?.action;
+  const isHandledAction = action === 'order.placed' || action === 'order.refunded';
+
+  if (!rsvproofEventId || !body?.api_url || !isHandledAction) {
     // Acknowledge anything we don't recognize so Eventbrite doesn't retry
     // forever, rather than erroring on actions we're not subscribed to.
     return NextResponse.json({ received: true });
@@ -55,16 +59,22 @@ export async function POST(request) {
   }
 
   const order = await orderRes.json();
-  const attendees = order.attendees || [];
+  const ebAttendees = order.attendees || [];
 
-  for (const ebAttendee of attendees) {
-    await handleAttendee(ebAttendee, event);
+  if (action === 'order.placed') {
+    for (const ebAttendee of ebAttendees) {
+      await handleNewAttendee(ebAttendee, event);
+    }
+  } else {
+    for (const ebAttendee of ebAttendees) {
+      await handleCancelledAttendee(ebAttendee);
+    }
   }
 
-  return NextResponse.json({ received: true, processed: attendees.length });
+  return NextResponse.json({ received: true, processed: ebAttendees.length });
 }
 
-async function handleAttendee(ebAttendee, event) {
+async function handleNewAttendee(ebAttendee, event) {
   const profile = ebAttendee.profile || {};
   if (!profile.email) return; // nothing to invite without an email
 
@@ -124,5 +134,30 @@ async function handleAttendee(ebAttendee, event) {
     });
   } catch (err) {
     console.error('Invite email failed to send:', err);
+  }
+}
+
+async function handleCancelledAttendee(ebAttendee) {
+  // No email is sent from here. Eventbrite already confirmed the
+  // cancellation to the attendee on their end, this just syncs RSVproof's
+  // own record so they don't get charged as a no-show for an event they
+  // already backed out of.
+  const { data: attendee } = await supabaseAdmin
+    .from('attendees')
+    .select('*')
+    .eq('eventbrite_attendee_id', ebAttendee.id)
+    .single();
+
+  if (!attendee) {
+    // No RSVproof row exists for this Eventbrite attendee at all, so
+    // there's nothing here to cancel or release.
+    console.error('order.refunded for unknown eventbrite_attendee_id:', ebAttendee.id);
+    return;
+  }
+
+  try {
+    await cancelAttendeeDeposit(attendee);
+  } catch (err) {
+    console.error('Cancelling attendee from Eventbrite refund failed:', err);
   }
 }
