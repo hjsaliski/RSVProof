@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getEventbriteOrganizationId, registerEventbriteOrgWebhook } from '@/lib/eventbrite';
 
 // State tokens older than this are rejected, in case a stale, abandoned
 // OAuth attempt gets picked back up somehow.
@@ -88,6 +89,30 @@ export async function GET(request) {
   if (upsertError) {
     console.error('Saving Eventbrite connection failed:', upsertError);
     return redirectTo('error');
+  }
+
+  // Register the org-level webhook that powers automatic event sync, so
+  // any event the organizer creates in Eventbrite from now on mirrors
+  // into RSVproof without a manual step. Best-effort: if this fails, the
+  // organizer is still connected and can use the manual "Link" flow as a
+  // fallback, this just means auto-sync isn't live for them yet.
+  try {
+    const organizationId = await getEventbriteOrganizationId(tokenJson.access_token);
+    await registerEventbriteOrgWebhook({
+      accessToken: tokenJson.access_token,
+      organizationId,
+      organizerId: stateRow.organizer_id,
+      origin,
+    });
+    await supabaseAdmin
+      .from('eventbrite_connections')
+      .update({
+        organization_id: organizationId,
+        org_webhook_registered_at: new Date().toISOString(),
+      })
+      .eq('organizer_id', stateRow.organizer_id);
+  } catch (err) {
+    console.error('Registering Eventbrite org-level webhook failed (non-fatal):', err);
   }
 
   return redirectTo('connected');

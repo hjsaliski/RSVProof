@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getEventbriteOrganizationId, registerEventbriteEventWebhook } from '@/lib/eventbrite';
 
 export async function POST(request) {
   const authHeader = request.headers.get('authorization');
@@ -31,7 +32,7 @@ export async function POST(request) {
 
   const { data: connection } = await supabaseAdmin
     .from('eventbrite_connections')
-    .select('access_token')
+    .select('access_token, organization_id')
     .eq('organizer_id', userData.user.id)
     .single();
 
@@ -39,56 +40,31 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Eventbrite is not connected' }, { status: 400 });
   }
 
-  const orgsRes = await fetch('https://www.eventbriteapi.com/v3/users/me/organizations/', {
-    headers: { Authorization: `Bearer ${connection.access_token}` },
-  });
+  try {
+    let organizationId = connection.organization_id;
+    if (!organizationId) {
+      organizationId = await getEventbriteOrganizationId(connection.access_token);
+      await supabaseAdmin
+        .from('eventbrite_connections')
+        .update({ organization_id: organizationId })
+        .eq('organizer_id', userData.user.id);
+    }
 
-  if (!orgsRes.ok) {
-    const errJson = await orgsRes.json().catch(() => ({}));
-    console.error('Eventbrite organizations fetch failed:', errJson);
-    return NextResponse.json(
-      { error: errJson.error_description || errJson.error || 'Could not load your Eventbrite organization' },
-      { status: 502 }
-    );
-  }
-
-  const orgsJson = await orgsRes.json();
-  const organizationId = orgsJson.organizations?.[0]?.id;
-
-  if (!organizationId) {
-    return NextResponse.json({ error: 'No Eventbrite organization found on this account' }, { status: 400 });
-  }
-
-  // The webhook URL carries our own internal event id as a query param.
-  // Earlier this handler tried to identify the right organizer/event by
-  // matching Eventbrite's own user_id from the webhook payload, but that
-  // value turned out not to reliably match anything we had stored.
-  // Embedding our own id here removes that guesswork entirely.
-  //
-  // Subscribed to order.refunded alongside order.placed so a cancellation
-  // on Eventbrite's side can sync back and release the attendee's deposit
-  // hold automatically, instead of leaving a cancelled attendee sitting at
-  // "pending" and getting charged as a no-show anyway.
-  const webhookRes = await fetch(`https://www.eventbriteapi.com/v3/organizations/${organizationId}/webhooks/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${connection.access_token}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      endpoint_url: `${new URL(request.url).origin}/api/eventbrite/webhook?rsvproofEventId=${event.id}`,
-      actions: 'order.placed,order.refunded',
-      event_id: eventbriteEventId,
-    }),
-  });
-
-  if (!webhookRes.ok) {
-    const errJson = await webhookRes.json().catch(() => ({}));
-    console.error('Eventbrite webhook registration failed:', errJson);
-    return NextResponse.json(
-      { error: errJson.error_description || errJson.error || 'Could not register the Eventbrite webhook' },
-      { status: 502 }
-    );
+    // The webhook URL carries our own internal event id as a query param.
+    // Earlier this handler tried to identify the right organizer/event by
+    // matching Eventbrite's own user_id from the webhook payload, but that
+    // value turned out not to reliably match anything we had stored.
+    // Embedding our own id here removes that guesswork entirely.
+    await registerEventbriteEventWebhook({
+      accessToken: connection.access_token,
+      organizationId,
+      eventbriteEventId,
+      rsvproofEventId: event.id,
+      origin: new URL(request.url).origin,
+    });
+  } catch (err) {
+    console.error('Eventbrite webhook registration failed:', err);
+    return NextResponse.json({ error: err.message || 'Could not register the Eventbrite webhook' }, { status: 502 });
   }
 
   const { error: updateError } = await supabaseAdmin
