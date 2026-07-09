@@ -69,8 +69,8 @@ export default function DashboardPage() {
           <h1 className="font-display text-3xl">Your events</h1>
         </div>
         <div className="flex items-center gap-4">
-          <a href="/dashboard/settings" className="text-sm underline text-ink-soft">
-            Branding
+          <a href="/dashboard/profile" className="text-sm underline text-ink-soft">
+            Profile
           </a>
           <button onClick={handleLogout} className="text-sm underline text-ink-soft">
             Log out
