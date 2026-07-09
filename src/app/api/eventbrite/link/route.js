@@ -59,6 +59,11 @@ export async function POST(request) {
     return NextResponse.json({ error: 'No Eventbrite organization found on this account' }, { status: 400 });
   }
 
+  // The webhook URL carries our own internal event id as a query param.
+  // Earlier this handler tried to identify the right organizer/event by
+  // matching Eventbrite's own user_id from the webhook payload, but that
+  // value turned out not to reliably match anything we had stored.
+  // Embedding our own id here removes that guesswork entirely.
   const webhookRes = await fetch(`https://www.eventbriteapi.com/v3/organizations/${organizationId}/webhooks/`, {
     method: 'POST',
     headers: {
@@ -66,7 +71,7 @@ export async function POST(request) {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: new URLSearchParams({
-      endpoint_url: `${new URL(request.url).origin}/api/eventbrite/webhook`,
+      endpoint_url: `${new URL(request.url).origin}/api/eventbrite/webhook?rsvproofEventId=${event.id}`,
       actions: 'order.placed',
       event_id: eventbriteEventId,
     }),

@@ -5,26 +5,43 @@ import { resend } from '@/lib/resend';
 
 // Eventbrite's webhook payload is intentionally thin, just enough to tell
 // us something happened and where to fetch the real details:
-// { config: { action, user_id, ... }, api_url: "https://www.eventbriteapi.com/v3/orders/123/" }
-// We use config.user_id to figure out which organizer's access token to
-// fetch the actual order with, since the payload itself carries no token.
+// { config: { action, ... }, api_url: "https://www.eventbriteapi.com/v3/orders/123/" }
+// Earlier this handler tried to identify the organizer via config.user_id,
+// but that value turned out not to reliably match the personal user ID
+// captured during OAuth (likely an organization ID instead, a separate
+// Eventbrite concept). Rather than chase that down, the webhook URL now
+// carries our own internal event ID directly as a query param, set at
+// registration time, so there's nothing to guess or match here at all.
 export async function POST(request) {
+  const { searchParams } = new URL(request.url);
+  const rsvproofEventId = searchParams.get('rsvproofEventId');
+
   const body = await request.json().catch(() => null);
-  if (!body?.api_url || body?.config?.action !== 'order.placed') {
-    // Acknowledge anything we don't care about so Eventbrite doesn't retry
+  if (!rsvproofEventId || !body?.api_url || body?.config?.action !== 'order.placed') {
+    // Acknowledge anything we don't recognize so Eventbrite doesn't retry
     // forever, rather than erroring on actions we're not subscribed to.
     return NextResponse.json({ received: true });
   }
 
-  const eventbriteUserId = body.config.user_id;
+  const { data: event } = await supabaseAdmin
+    .from('events')
+    .select('*')
+    .eq('id', rsvproofEventId)
+    .single();
+
+  if (!event) {
+    console.error('Webhook fired for an unknown RSVproof event id:', rsvproofEventId);
+    return NextResponse.json({ received: true });
+  }
+
   const { data: connection } = await supabaseAdmin
     .from('eventbrite_connections')
-    .select('organizer_id, access_token')
-    .eq('eventbrite_user_id', eventbriteUserId)
+    .select('access_token')
+    .eq('organizer_id', event.organizer_id)
     .single();
 
   if (!connection) {
-    console.error('Webhook received for an unrecognized Eventbrite user_id:', eventbriteUserId);
+    console.error('No Eventbrite connection found for organizer:', event.organizer_id);
     return NextResponse.json({ received: true });
   }
 
@@ -41,29 +58,15 @@ export async function POST(request) {
   const attendees = order.attendees || [];
 
   for (const ebAttendee of attendees) {
-    await handleAttendee(ebAttendee, connection.organizer_id);
+    await handleAttendee(ebAttendee, event);
   }
 
   return NextResponse.json({ received: true, processed: attendees.length });
 }
 
-async function handleAttendee(ebAttendee, organizerId) {
-  const ebEventId = ebAttendee.event_id;
+async function handleAttendee(ebAttendee, event) {
   const profile = ebAttendee.profile || {};
-
   if (!profile.email) return; // nothing to invite without an email
-
-  const { data: event } = await supabaseAdmin
-    .from('events')
-    .select('*')
-    .eq('eventbrite_event_id', ebEventId)
-    .eq('organizer_id', organizerId)
-    .single();
-
-  if (!event) {
-    console.error('No RSVproof event linked to Eventbrite event:', ebEventId);
-    return;
-  }
 
   // Dedupe: Eventbrite webhooks can and do redeliver the same event.
   const { data: existing } = await supabaseAdmin
