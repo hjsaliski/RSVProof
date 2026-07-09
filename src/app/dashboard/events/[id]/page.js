@@ -11,6 +11,8 @@ export default function EventDetailPage() {
   const [attendees, setAttendees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [depositInput, setDepositInput] = useState('');
+  const [savingDeposit, setSavingDeposit] = useState(false);
   const [siteUrl, setSiteUrl] = useState('');
   const [chargeResult, setChargeResult] = useState(null);
   const [charging, setCharging] = useState(false);
@@ -44,6 +46,9 @@ export default function EventDetailPage() {
       .eq('id', id)
       .single();
     setEvent(eventData);
+    setDepositInput(
+      eventData?.deposit_amount_cents != null ? (eventData.deposit_amount_cents / 100).toFixed(2) : ''
+    );
 
     const { data: attendeeData } = await supabase
       .from('attendees')
@@ -115,6 +120,14 @@ export default function EventDetailPage() {
   }
 
   async function toggleDeposits() {
+    // Auto-created events from Eventbrite start with no deposit amount at
+    // all, since there's nothing on Eventbrite's side to pull one from.
+    // Blocking this here prevents accidentally going live with a $0.00
+    // hold, which invites people without actually protecting the event.
+    if (!event.deposit_enabled && (!event.deposit_amount_cents || event.deposit_amount_cents <= 0)) {
+      alert('Set a deposit amount below before turning deposits on.');
+      return;
+    }
     setSaving(true);
     await supabase
       .from('events')
@@ -122,6 +135,21 @@ export default function EventDetailPage() {
       .eq('id', id);
     await load();
     setSaving(false);
+  }
+
+  async function saveDepositAmount() {
+    const cents = Math.round(parseFloat(depositInput) * 100);
+    if (isNaN(cents) || cents < 0) {
+      alert('Enter a valid deposit amount.');
+      return;
+    }
+    setSavingDeposit(true);
+    await supabase
+      .from('events')
+      .update({ deposit_amount_cents: cents })
+      .eq('id', id);
+    await load();
+    setSavingDeposit(false);
   }
 
   async function manualCheckIn(attendeeId) {
@@ -309,7 +337,25 @@ export default function EventDetailPage() {
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-ink-soft">Deposit amount</span>
-          <span className="font-mono font-medium">${(event.deposit_amount_cents / 100).toFixed(2)}</span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-ink-soft">$</span>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              value={depositInput}
+              onChange={(e) => setDepositInput(e.target.value)}
+              className="field px-2 py-1 text-sm font-mono w-20"
+            />
+            <button
+              type="button"
+              onClick={saveDepositAmount}
+              disabled={savingDeposit}
+              className="text-xs underline text-ink-soft disabled:opacity-50"
+            >
+              {savingDeposit ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </div>
         <div className="flex items-center justify-between text-sm">
           <span className="text-ink-soft">Check-in cutoff</span>
