@@ -1,80 +1,106 @@
-// Shared Eventbrite helpers, used by both the manual "Link" flow and
-// automatic event sync. Kept general enough that if another platform
-// (Partiful, RSVPify, etc.) gets added later, it can follow the same
-// organization -> webhook shape rather than needing a different pattern.
+import { NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getEventbriteOrganizationId, registerEventbriteEventWebhook } from '@/lib/eventbrite';
 
-export async function getEventbriteOrganizationId(accessToken) {
-  const orgsRes = await fetch('https://www.eventbriteapi.com/v3/users/me/organizations/', {
-    headers: { Authorization: `Bearer ${accessToken}` },
+// Fires whenever the organizer creates a new event in Eventbrite. Mirrors
+// it into RSVproof automatically, deposits off and no amount set until the
+// organizer configures one, since Eventbrite has no equivalent concept to
+// pull a default from. Then immediately registers that new event's own
+// order.placed/order.refunded webhook, so attendee syncing is live right
+// away instead of waiting for a manual "Link" click.
+export async function POST(request) {
+  const { searchParams, origin } = new URL(request.url);
+  const organizerId = searchParams.get('organizerId');
+
+  const body = await request.json().catch(() => null);
+  if (!organizerId || !body?.api_url || body?.config?.action !== 'event.created') {
+    // Acknowledge anything we don't recognize so Eventbrite doesn't retry
+    // forever, rather than erroring on actions we're not subscribed to.
+    return NextResponse.json({ received: true });
+  }
+
+  const { data: connection } = await supabaseAdmin
+    .from('eventbrite_connections')
+    .select('access_token, organization_id')
+    .eq('organizer_id', organizerId)
+    .single();
+
+  if (!connection) {
+    console.error('org-webhook fired for organizer with no Eventbrite connection:', organizerId);
+    return NextResponse.json({ received: true });
+  }
+
+  const eventRes = await fetch(`${body.api_url}?expand=venue`, {
+    headers: { Authorization: `Bearer ${connection.access_token}` },
   });
 
-  if (!orgsRes.ok) {
-    const errJson = await orgsRes.json().catch(() => ({}));
-    throw new Error(errJson.error_description || errJson.error || 'Could not load Eventbrite organization');
+  if (!eventRes.ok) {
+    console.error('Fetching Eventbrite event details failed:', await eventRes.text());
+    return NextResponse.json({ received: true });
   }
 
-  const orgsJson = await orgsRes.json();
-  const organizationId = orgsJson.organizations?.[0]?.id;
-  if (!organizationId) {
-    throw new Error('No Eventbrite organization found on this account');
+  const ebEvent = await eventRes.json();
+
+  // Dedupe: Eventbrite webhooks can and do redeliver the same event.
+  const { data: existing } = await supabaseAdmin
+    .from('events')
+    .select('id')
+    .eq('eventbrite_event_id', ebEvent.id)
+    .single();
+
+  if (existing) {
+    return NextResponse.json({ received: true, alreadyExists: true });
   }
-  return organizationId;
-}
 
-// Registers the per-event webhook (order.placed, order.refunded) that
-// syncs attendee signups and cancellations for one specific event. Used
-// both when an organizer manually links an event, and automatically right
-// after an event gets auto-created from Eventbrite's event.created webhook.
-export async function registerEventbriteEventWebhook({
-  accessToken,
-  organizationId,
-  eventbriteEventId,
-  rsvproofEventId,
-  origin,
-}) {
-  const webhookRes = await fetch(`https://www.eventbriteapi.com/v3/organizations/${organizationId}/webhooks/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      endpoint_url: `${origin}/api/eventbrite/webhook?rsvproofEventId=${rsvproofEventId}`,
-      actions: 'order.placed,order.refunded',
-      event_id: eventbriteEventId,
-    }),
-  });
+  // Online events, or ones without a venue set yet, won't have an address
+  // to pull, so this falls back rather than leaving location blank.
+  const location = ebEvent.venue?.address?.localized_address_display || 'Online / TBD';
 
-  if (!webhookRes.ok) {
-    const errJson = await webhookRes.json().catch(() => ({}));
-    throw new Error(errJson.error_description || errJson.error || 'Could not register the Eventbrite event webhook');
+  const { data: newEvent, error: insertError } = await supabaseAdmin
+    .from('events')
+    .insert({
+      organizer_id: organizerId,
+      name: ebEvent.name?.text || 'Untitled event',
+      event_date: ebEvent.start?.utc,
+      location,
+      checkin_cutoff: ebEvent.end?.utc,
+      deposit_amount_cents: null,
+      deposit_enabled: false,
+      source: 'eventbrite',
+      eventbrite_event_id: ebEvent.id,
+      status: 'active',
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    console.error('Auto-creating event from Eventbrite failed:', insertError);
+    return NextResponse.json({ received: true });
   }
-}
 
-// Registers the organization-level webhook that fires whenever a new
-// event is created in Eventbrite, so RSVproof can mirror it automatically.
-// Registered once, right after OAuth connect, not per-event, since no
-// event exists yet at connection time to scope a per-event webhook to.
-export async function registerEventbriteOrgWebhook({
-  accessToken,
-  organizationId,
-  organizerId,
-  origin,
-}) {
-  const webhookRes = await fetch(`https://www.eventbriteapi.com/v3/organizations/${organizationId}/webhooks/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      endpoint_url: `${origin}/api/eventbrite/org-webhook?organizerId=${organizerId}`,
-      actions: 'event.created',
-    }),
-  });
+  try {
+    let organizationId = connection.organization_id;
+    if (!organizationId) {
+      organizationId = await getEventbriteOrganizationId(connection.access_token);
+      await supabaseAdmin
+        .from('eventbrite_connections')
+        .update({ organization_id: organizationId })
+        .eq('organizer_id', organizerId);
+    }
 
-  if (!webhookRes.ok) {
-    const errJson = await webhookRes.json().catch(() => ({}));
-    throw new Error(errJson.error_description || errJson.error || 'Could not register the Eventbrite org webhook');
+    await registerEventbriteEventWebhook({
+      accessToken: connection.access_token,
+      organizationId,
+      eventbriteEventId: ebEvent.id,
+      rsvproofEventId: newEvent.id,
+      origin,
+    });
+  } catch (err) {
+    // The event still exists on the dashboard even if this fails, the
+    // organizer just wouldn't get automatic attendee syncing yet. The
+    // existing manual "Link" button covers this as a fallback.
+    console.error('Registering event-level webhook for auto-created event failed:', err);
   }
+
+  return NextResponse.json({ received: true, eventId: newEvent.id });
 }
