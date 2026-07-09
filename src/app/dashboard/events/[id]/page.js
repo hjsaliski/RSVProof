@@ -16,6 +16,8 @@ export default function EventDetailPage() {
   const [charging, setCharging] = useState(false);
   const [reminderResult, setReminderResult] = useState(null);
   const [sendingReminders, setSendingReminders] = useState(false);
+  const [remindInvitedResult, setRemindInvitedResult] = useState(null);
+  const [remindingInvited, setRemindingInvited] = useState(false);
   const [eventbriteConnected, setEventbriteConnected] = useState(false);
   const [eventbriteEvents, setEventbriteEvents] = useState([]);
   const [loadingEbEvents, setLoadingEbEvents] = useState(false);
@@ -148,6 +150,43 @@ export default function EventDetailPage() {
     }
   }
 
+  async function remindAllInvited() {
+    const invited = attendees.filter((a) => a.charge_status === 'invited');
+    if (invited.length === 0) return;
+
+    setRemindingInvited(true);
+    setRemindInvitedResult(null);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const results = [];
+
+    // Reuses the same resend-invite route as the individual button, just
+    // looped across everyone still stuck at "invited" for this event.
+    for (const a of invited) {
+      try {
+        const res = await fetch('/api/attendees/resend-invite', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ attendeeId: a.id }),
+        });
+        const json = await res.json();
+        results.push({ name: a.name, ...json });
+      } catch (err) {
+        results.push({ name: a.name, error: err.message });
+      }
+    }
+
+    setRemindInvitedResult({
+      sent: results.filter((r) => r.success).length,
+      failed: results.filter((r) => r.error).length,
+      results,
+    });
+    setRemindingInvited(false);
+  }
+
   async function runNoShowCharges() {
     if (!confirm('This will charge every attendee who has not checked in. Continue?')) return;
     setCharging(true);
@@ -210,6 +249,7 @@ export default function EventDetailPage() {
   const checkedInCount = attendees.filter((a) => a.checked_in_at).length;
   const chargedCount = attendees.filter((a) => a.charge_status === 'charged').length;
   const pendingCount = attendees.filter((a) => a.charge_status === 'pending').length;
+  const invitedCount = attendees.filter((a) => a.charge_status === 'invited').length;
   const totalAttendees = attendees.length;
   const showUpRate = totalAttendees > 0 ? Math.round((checkedInCount / totalAttendees) * 100) : null;
   const depositAmount = event.deposit_amount_cents / 100;
@@ -388,6 +428,29 @@ export default function EventDetailPage() {
         {reminderResult && (
           <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
             {JSON.stringify(reminderResult, null, 2)}
+          </pre>
+        )}
+      </div>
+
+      <div className="panel p-5 mb-5">
+        <h2 className="font-medium mb-2">Invited, not yet secured</h2>
+        <p className="text-sm text-ink-soft mb-4">
+          People who RSVP&apos;d on a connected platform like Eventbrite but
+          haven&apos;t secured their deposit yet. Sends the same invite email
+          they already got once.
+        </p>
+        <p className="font-display text-2xl mb-4">{invitedCount}</p>
+        <button
+          onClick={remindAllInvited}
+          disabled={remindingInvited || invitedCount === 0}
+          className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: 'var(--marigold-dark)' }}
+        >
+          {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
+        </button>
+        {remindInvitedResult && (
+          <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+            {JSON.stringify(remindInvitedResult, null, 2)}
           </pre>
         )}
       </div>
