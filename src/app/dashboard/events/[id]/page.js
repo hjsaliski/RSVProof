@@ -125,6 +125,9 @@ export default function EventDetailPage() {
   }
 
   async function manualCheckIn(attendeeId) {
+    const attendee = attendees.find((a) => a.id === attendeeId);
+    if (attendee?.charge_status === 'cancelled') return;
+
     await supabase
       .from('attendees')
       .update({ checked_in_at: new Date().toISOString(), checked_in_method: 'manual' })
@@ -502,6 +505,8 @@ export default function EventDetailPage() {
                   <span className="text-xs text-marigold-dark font-medium">
                     Checked in ({a.checked_in_method})
                   </span>
+                ) : a.charge_status === 'cancelled' ? (
+                  <span className="text-xs text-ink-soft">Deposit cancelled</span>
                 ) : (
                   <button
                     onClick={() => manualCheckIn(a.id)}
