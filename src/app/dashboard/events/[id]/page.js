@@ -251,6 +251,8 @@ export default function EventDetailPage() {
   const pendingCount = attendees.filter((a) => a.charge_status === 'pending').length;
   const invitedCount = attendees.filter((a) => a.charge_status === 'invited').length;
   const totalAttendees = attendees.length;
+  const securedCount = totalAttendees - invitedCount;
+  const conversionRate = totalAttendees > 0 ? Math.round((securedCount / totalAttendees) * 100) : null;
   const showUpRate = totalAttendees > 0 ? Math.round((checkedInCount / totalAttendees) * 100) : null;
   const depositAmount = event.deposit_amount_cents / 100;
   const revenueProtected = chargedCount * depositAmount;
@@ -454,6 +456,32 @@ export default function EventDetailPage() {
           </pre>
         )}
       </div>
+
+      {event.eventbrite_event_id && (
+        <div className="panel p-5 mb-5">
+          <h2 className="font-medium mb-2">Eventbrite RSVP conversion</h2>
+          <p className="text-sm text-ink-soft mb-4">
+            Before RSVproof, every one of these RSVPs was a no-show risk with
+            nothing backing it. Here&apos;s how many actually secured a deposit.
+          </p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="eyebrow mb-1">RSVP&apos;d on Eventbrite</p>
+              <p className="font-display text-2xl">{totalAttendees}</p>
+            </div>
+            <div>
+              <p className="eyebrow mb-1">Secured a deposit</p>
+              <p className="font-display text-2xl">{securedCount}</p>
+            </div>
+            <div>
+              <p className="eyebrow mb-1">Conversion</p>
+              <p className="font-display text-2xl">
+                {conversionRate === null ? '—' : `${conversionRate}%`}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="panel p-5 mb-5">
         <h2 className="font-medium mb-3">
