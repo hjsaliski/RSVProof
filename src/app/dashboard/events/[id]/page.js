@@ -130,6 +130,24 @@ export default function EventDetailPage() {
     await load();
   }
 
+  async function resendInvite(attendeeId) {
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/attendees/resend-invite', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ attendeeId }),
+    });
+    const json = await res.json();
+    if (json.error) {
+      alert(`Send failed: ${json.error}`);
+    } else {
+      alert('Invite email sent, check the inbox.');
+    }
+  }
+
   async function runNoShowCharges() {
     if (!confirm('This will charge every attendee who has not checked in. Continue?')) return;
     setCharging(true);
@@ -399,6 +417,14 @@ export default function EventDetailPage() {
                     className="text-xs underline text-ink-soft"
                   >
                     Mark checked in
+                  </button>
+                )}
+                {a.charge_status === 'invited' && (
+                  <button
+                    onClick={() => resendInvite(a.id)}
+                    className="text-xs underline text-ink-soft block mt-1"
+                  >
+                    Resend invite
                   </button>
                 )}
                 <p className="text-xs text-ink-soft mt-1 font-mono">{a.charge_status}</p>
