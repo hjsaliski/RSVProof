@@ -63,7 +63,12 @@ export async function POST(request) {
     });
 
     if (!eventRes.ok) {
-      console.error('Fetching Eventbrite event details failed:', await eventRes.text());
+      const errText = await eventRes.text();
+      console.error('Fetching Eventbrite event details failed:', errText);
+      await supabaseAdmin
+        .from('events')
+        .update({ debug_last_webhook: JSON.stringify({ fetchOk: false, status: eventRes.status, errText, at: new Date().toISOString() }) })
+        .eq('id', event.id);
       return NextResponse.json({ received: true });
     }
 
@@ -71,10 +76,26 @@ export async function POST(request) {
     const rawStatus = ebEvent.status;
     const salesStatus = ebEvent.event_sales_status?.sales_status;
     const messageCode = ebEvent.event_sales_status?.message_code;
-    console.error('event.updated debug:', JSON.stringify({ rawStatus, salesStatus, messageCode }));
 
     const normalizedStatus = String(rawStatus || '').toLowerCase();
     const isCancelled = normalizedStatus.includes('cancel') || messageCode === 'event_cancelled';
+
+    // Written unconditionally, whether or not isCancelled ends up true, so
+    // this is checkable directly in Supabase without needing Vercel's log
+    // UI at all.
+    await supabaseAdmin
+      .from('events')
+      .update({
+        debug_last_webhook: JSON.stringify({
+          fetchOk: true,
+          rawStatus,
+          salesStatus,
+          messageCode,
+          isCancelled,
+          at: new Date().toISOString(),
+        }),
+      })
+      .eq('id', event.id);
 
     if (isCancelled) {
       try {
