@@ -12,7 +12,6 @@ export default function NewEventPage() {
     location: '',
     event_date: '',
     checkin_cutoff: '',
-    deposit_amount: '5.00',
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,8 +31,11 @@ export default function NewEventPage() {
       return;
     }
 
-    const depositCents = Math.round(parseFloat(form.deposit_amount) * 100);
-
+    // Deposit amount is set afterward on the event's own page, same as
+    // events auto-synced from Eventbrite. deposit_enabled stays off by
+    // default (its normal column default) until an amount is actually set,
+    // the same guard already in place on the event dashboard prevents
+    // turning deposits on with nothing configured.
     const { data, error: insertError } = await supabase
       .from('events')
       .insert({
@@ -43,7 +45,7 @@ export default function NewEventPage() {
         location: form.location,
         event_date: form.event_date,
         checkin_cutoff: form.checkin_cutoff,
-        deposit_amount_cents: depositCents,
+        deposit_amount_cents: null,
       })
       .select()
       .single();
@@ -114,18 +116,10 @@ export default function NewEventPage() {
             className="field w-full px-3 py-2"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Deposit amount (USD)</label>
-          <input
-            required
-            type="number"
-            step="0.01"
-            min="0.50"
-            value={form.deposit_amount}
-            onChange={(e) => update('deposit_amount', e.target.value)}
-            className="field w-full px-3 py-2 font-mono"
-          />
-        </div>
+        <p className="text-xs text-ink-soft">
+          Deposit amount and enabling deposits happen on the event page after
+          it&apos;s created.
+        </p>
         {error && <p className="text-clay text-sm">{error}</p>}
         <button
           type="submit"
