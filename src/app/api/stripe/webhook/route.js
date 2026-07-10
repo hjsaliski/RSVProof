@@ -57,16 +57,34 @@ export async function POST(request) {
     }
 
     case 'charge.dispute.created': {
-      // Logged only for now, not changing charge_status, since deciding how
-      // a dispute should affect an attendee's record (and any response to
-      // Stripe) is Phase 3 scope. This at least means a dispute shows up
-      // somewhere instead of only being visible in the Stripe dashboard.
       const dispute = event.data.object;
-      console.error('Stripe dispute opened:', {
-        chargeId: dispute.charge,
-        amount: dispute.amount,
+
+      // The dispute payload only has the charge id, so the attendee (and
+      // through them, the event) has to be looked up rather than being
+      // handed to us directly like the payment_intent cases above.
+      const { data: attendee } = await supabaseAdmin
+        .from('attendees')
+        .select('id, event_id')
+        .eq('stripe_charge_id', dispute.charge)
+        .single();
+
+      const { error: insertError } = await supabaseAdmin.from('disputes').insert({
+        stripe_dispute_id: dispute.id,
+        stripe_charge_id: dispute.charge,
+        attendee_id: attendee?.id || null,
+        event_id: attendee?.event_id || null,
+        amount_cents: dispute.amount,
+        currency: dispute.currency,
         reason: dispute.reason,
+        status: dispute.status,
       });
+
+      if (insertError) {
+        console.error('Failed to log dispute to database:', insertError, {
+          chargeId: dispute.charge,
+          disputeId: dispute.id,
+        });
+      }
       break;
     }
 
