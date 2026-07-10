@@ -51,6 +51,36 @@ export async function registerEventbriteEventWebhook({
   }
 }
 
+// Direct safety check against Eventbrite's API, used right before charging
+// no-shows on a linked event. The event.updated webhook is best-effort and
+// has been observed not firing reliably for status changes, so this is the
+// real guarantee: even if the webhook never arrives, an event won't get
+// charged after being cancelled on Eventbrite, since this check runs at
+// the moment that actually matters.
+export async function checkEventbriteEventCancelled(eventbriteEventId, accessToken) {
+  const res = await fetch(
+    `https://www.eventbriteapi.com/v3/events/${eventbriteEventId}/?expand=event_sales_status`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  if (!res.ok) {
+    // Don't block charging on an API hiccup, an unreachable check isn't
+    // evidence the event was cancelled. Logged so it's visible if it
+    // happens often.
+    console.error('Checking Eventbrite event status failed:', await res.text());
+    return false;
+  }
+
+  const ebEvent = await res.json();
+  // Eventbrite's base "status" field doesn't reliably flip to "canceled"
+  // when an organizer cancels via the status dropdown, confirmed directly
+  // against their API during testing, so the event_sales_status expansion
+  // is checked too, which is where cancellation actually shows up.
+  const rawStatus = String(ebEvent.status || '').toLowerCase();
+  const messageCode = ebEvent.event_sales_status?.message_code;
+  return rawStatus.includes('cancel') || messageCode === 'event_cancelled';
+}
+
 // Registers the organization-level webhook that fires whenever the
 // organizer publishes an event on Eventbrite, so RSVproof can mirror it
 // automatically. Subscribed to event.published rather than event.created

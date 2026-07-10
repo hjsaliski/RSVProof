@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { checkEventbriteEventCancelled } from '@/lib/eventbrite';
+import { cancelEventAndAttendees } from '@/lib/cancelEvent';
 
 // Two ways to trigger this route:
 // 1. Organizer clicks "Run no-show charges" on their event dashboard, sending
@@ -44,6 +46,43 @@ async function chargeAttendee(attendee, event) {
 }
 
 async function processEvent(event) {
+  // Safety net for Eventbrite-linked events: the event.updated webhook that
+  // would normally sync a cancellation has been observed not firing
+  // reliably, so this checks directly against Eventbrite's API right
+  // before charging anyone, the moment it actually matters. If it turns
+  // out the event was cancelled there but never synced, this catches it
+  // here instead of charging attendees for an event that isn't happening,
+  // and runs the same cancellation cleanup the webhook would have.
+  if (event.eventbrite_event_id) {
+    try {
+      const { data: connection } = await supabaseAdmin
+        .from('eventbrite_connections')
+        .select('access_token')
+        .eq('organizer_id', event.organizer_id)
+        .single();
+
+      if (connection) {
+        const isCancelled = await checkEventbriteEventCancelled(
+          event.eventbrite_event_id,
+          connection.access_token
+        );
+
+        if (isCancelled) {
+          const result = await cancelEventAndAttendees(event.id);
+          return [{
+            skipped: true,
+            reason: 'Event was found cancelled on Eventbrite, no charges were run',
+            ...result,
+          }];
+        }
+      }
+    } catch (err) {
+      // Don't let a failed safety check block the whole charge run, an
+      // unreachable Eventbrite API isn't evidence the event was cancelled.
+      console.error('Eventbrite live-status check failed, proceeding with charge run:', err);
+    }
+  }
+
   const { data: noShows } = await supabaseAdmin
     .from('attendees')
     .select('*')

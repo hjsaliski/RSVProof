@@ -607,44 +607,40 @@ export default function EventDetailPage() {
         </ul>
       </div>
 
-      {event.eventbrite_event_id ? (
-        <div className="panel p-5 mb-5" style={{ borderColor: 'var(--clay)' }}>
-          <h2 className="font-medium mb-2">Cancel this event</h2>
-          <p className="text-sm text-ink-soft">
-            This event was created on Eventbrite, so that&apos;s where it needs
-            to be cancelled too. Cancel it there and it&apos;ll sync here
-            automatically, releasing every attendee&apos;s deposit hold and
-            notifying them, no extra step needed on your end.
+      <div className="panel p-5 mb-5" style={{ borderColor: 'var(--clay)' }}>
+        <h2 className="font-medium mb-2">Cancel this event</h2>
+        <p className="text-sm text-ink-soft mb-4">
+          Releases every attendee&apos;s deposit hold and emails them that the
+          event was cancelled. The event and its history stay on your
+          dashboard, just marked cancelled.
+        </p>
+        {event.eventbrite_event_id && (
+          <p className="text-sm text-ink-soft mb-4 border-l-2 pl-3" style={{ borderColor: 'var(--clay)' }}>
+            This event is linked to Eventbrite. Cancelling here only cancels
+            the deposit side, it does not cancel the event or tickets on
+            Eventbrite. If you also cancel or delete this event on
+            Eventbrite, you&apos;ll need to cancel it here separately too,
+            since syncing between the two isn&apos;t fully reliable yet.
           </p>
-        </div>
-      ) : (
-        <div className="panel p-5 mb-5" style={{ borderColor: 'var(--clay)' }}>
-          <h2 className="font-medium mb-2">Cancel this event</h2>
-          <p className="text-sm text-ink-soft mb-4">
-            Releases every attendee&apos;s deposit hold and emails them that the
-            event was cancelled. The event and its history stay on your
-            dashboard, just marked cancelled. Use this if the event itself
-            isn&apos;t happening anymore.
+        )}
+        <button
+          onClick={cancelEvent}
+          disabled={cancellingEvent || event.status === 'cancelled'}
+          className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
+          style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
+        >
+          {event.status === 'cancelled'
+            ? 'Already cancelled'
+            : cancellingEvent
+            ? 'Cancelling...'
+            : 'Cancel event'}
+        </button>
+        {cancelEventResult && (
+          <p className="text-sm text-marigold-dark mt-3">
+            Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
           </p>
-          <button
-            onClick={cancelEvent}
-            disabled={cancellingEvent || event.status === 'cancelled'}
-            className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
-            style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
-          >
-            {event.status === 'cancelled'
-              ? 'Already cancelled'
-              : cancellingEvent
-              ? 'Cancelling...'
-              : 'Cancel event'}
-          </button>
-          {cancelEventResult && (
-            <p className="text-sm text-marigold-dark mt-3">
-              Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
-            </p>
-          )}
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="panel p-5" style={{ borderColor: 'var(--clay)' }}>
         <h2 className="font-medium mb-2">Delete this event</h2>
