@@ -63,6 +63,7 @@ export async function POST(request) {
     }
 
     const ebEvent = await eventRes.json();
+    console.error('event.updated received, status field is:', ebEvent.status);
     if (ebEvent.status === 'canceled') {
       try {
         await cancelEventAndAttendees(event.id);

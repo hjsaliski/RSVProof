@@ -2,18 +2,20 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getEventbriteOrganizationId, registerEventbriteEventWebhook } from '@/lib/eventbrite';
 
-// Fires whenever the organizer creates a new event in Eventbrite. Mirrors
-// it into RSVproof automatically, deposits off and no amount set until the
-// organizer configures one, since Eventbrite has no equivalent concept to
-// pull a default from. Then immediately registers that new event's own
-// order.placed/order.refunded webhook, so attendee syncing is live right
-// away instead of waiting for a manual "Link" click.
+// Fires when the organizer publishes an event in Eventbrite (not on
+// creation, drafts don't trigger this, see registerEventbriteOrgWebhook
+// for why). Mirrors it into RSVproof automatically, deposits off and no
+// amount set until the organizer configures one, since Eventbrite has no
+// equivalent concept to pull a default from. Then immediately registers
+// that new event's own order.placed/order.refunded/event.updated webhook,
+// so attendee syncing is live right away instead of waiting for a manual
+// "Link" click.
 export async function POST(request) {
   const { searchParams, origin } = new URL(request.url);
   const organizerId = searchParams.get('organizerId');
 
   const body = await request.json().catch(() => null);
-  if (!organizerId || !body?.api_url || body?.config?.action !== 'event.created') {
+  if (!organizerId || !body?.api_url || body?.config?.action !== 'event.published') {
     // Acknowledge anything we don't recognize so Eventbrite doesn't retry
     // forever, rather than erroring on actions we're not subscribed to.
     return NextResponse.json({ received: true });

@@ -51,8 +51,14 @@ export async function registerEventbriteEventWebhook({
   }
 }
 
-// Registers the organization-level webhook that fires whenever a new
-// event is created in Eventbrite, so RSVproof can mirror it automatically.
+// Registers the organization-level webhook that fires whenever the
+// organizer publishes an event on Eventbrite, so RSVproof can mirror it
+// automatically. Subscribed to event.published rather than event.created
+// specifically, since event.created also fires for draft events that
+// haven't been published yet, and drafts can be freely deleted on
+// Eventbrite with no restrictions. Syncing on creation would leave orphaned
+// events in RSVproof if an organizer abandoned or deleted a draft, since
+// Eventbrite has no event.deleted webhook to clean that up automatically.
 // Registered once, right after OAuth connect, not per-event, since no
 // event exists yet at connection time to scope a per-event webhook to.
 export async function registerEventbriteOrgWebhook({
@@ -69,7 +75,7 @@ export async function registerEventbriteOrgWebhook({
     },
     body: new URLSearchParams({
       endpoint_url: `${origin}/api/eventbrite/org-webhook?organizerId=${organizerId}`,
-      actions: 'event.created',
+      actions: 'event.published',
     }),
   });
 
