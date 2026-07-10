@@ -3,6 +3,8 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { cancelEventAndAttendees } from '@/lib/cancelEvent';
 
 export async function POST(request, { params }) {
+  const { id } = await params;
+
   const authHeader = request.headers.get('authorization');
   if (!authHeader) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -13,8 +15,6 @@ export async function POST(request, { params }) {
   if (userError || !userData?.user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const { id } = params;
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from('events')
