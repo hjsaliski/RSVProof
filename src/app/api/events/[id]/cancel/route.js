@@ -18,13 +18,20 @@ export async function POST(request, { params }) {
 
   const { data: event, error: eventError } = await supabaseAdmin
     .from('events')
-    .select('id')
+    .select('id, eventbrite_event_id')
     .eq('id', id)
     .eq('organizer_id', userData.user.id)
     .single();
 
   if (eventError || !event) {
     return NextResponse.json({ error: 'Event not found' }, { status: 404 });
+  }
+
+  if (event.eventbrite_event_id) {
+    return NextResponse.json(
+      { error: 'This event was created on Eventbrite. Cancel it there and it will sync automatically.' },
+      { status: 400 }
+    );
   }
 
   try {
