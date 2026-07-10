@@ -79,6 +79,7 @@ export async function POST(request) {
 
     const normalizedStatus = String(rawStatus || '').toLowerCase();
     const isCancelled = normalizedStatus.includes('cancel') || messageCode === 'event_cancelled';
+    const isPostponed = normalizedStatus.includes('postpon') || messageCode === 'event_postponed';
 
     // Written unconditionally, whether or not isCancelled ends up true, so
     // this is checkable directly in Supabase without needing Vercel's log
@@ -92,6 +93,7 @@ export async function POST(request) {
           salesStatus,
           messageCode,
           isCancelled,
+          isPostponed,
           at: new Date().toISOString(),
         }),
       })
@@ -102,6 +104,17 @@ export async function POST(request) {
         await cancelEventAndAttendees(event.id);
       } catch (err) {
         console.error('Cancelling event from Eventbrite sync failed:', err);
+      }
+    } else if (isPostponed && !event.postponed_notified_at) {
+      // Postponed is meaningfully different from cancelled: the event is
+      // still happening, just not on the original date, so deposits stay
+      // exactly as they are, no release, no cancellation. Guarded by
+      // postponed_notified_at so a redelivered webhook (Eventbrite does
+      // this) doesn't re-send the same email to everyone repeatedly.
+      try {
+        await notifyAttendeesOfPostponement(event);
+      } catch (err) {
+        console.error('Notifying attendees of postponement failed:', err);
       }
     }
 
@@ -194,6 +207,44 @@ async function handleNewAttendee(ebAttendee, event) {
   } catch (err) {
     console.error('Invite email failed to send:', err);
   }
+}
+
+async function notifyAttendeesOfPostponement(event) {
+  const { data: attendees } = await supabaseAdmin
+    .from('attendees')
+    .select('*')
+    .eq('event_id', event.id)
+    .neq('charge_status', 'cancelled');
+
+  for (const attendee of attendees || []) {
+    if (!attendee.email || !resend) continue;
+
+    try {
+      await resend.emails.send({
+        from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+        to: attendee.email,
+        subject: `Event postponed: ${event.name}`,
+        html: `
+          <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
+            <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">Postponed</p>
+            <h1 style="font-size: 22px; margin: 0 0 4px;">${event.name}</h1>
+            <p style="color: #5b574c;">
+              The organizer has postponed this event. Your deposit is still
+              in place, nothing has changed there. The organizer will share
+              a new date soon.
+            </p>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error('Postponement email failed to send:', attendee.id, err);
+    }
+  }
+
+  await supabaseAdmin
+    .from('events')
+    .update({ postponed_notified_at: new Date().toISOString() })
+    .eq('id', event.id);
 }
 
 async function handleCancelledAttendee(ebAttendee) {

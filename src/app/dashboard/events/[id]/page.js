@@ -22,6 +22,7 @@ export default function EventDetailPage() {
   const [remindingInvited, setRemindingInvited] = useState(false);
   const [cancellingEvent, setCancellingEvent] = useState(false);
   const [cancelEventResult, setCancelEventResult] = useState(null);
+  const [disputeCount, setDisputeCount] = useState(0);
   const [eventbriteConnected, setEventbriteConnected] = useState(false);
   const [eventbriteEvents, setEventbriteEvents] = useState([]);
   const [loadingEbEvents, setLoadingEbEvents] = useState(false);
@@ -58,6 +59,12 @@ export default function EventDetailPage() {
       .eq('event_id', id)
       .order('created_at', { ascending: true });
     setAttendees(attendeeData || []);
+
+    const { count: disputesCount } = await supabase
+      .from('disputes')
+      .select('id', { count: 'exact', head: true })
+      .eq('event_id', id);
+    setDisputeCount(disputesCount || 0);
 
     const { data: connection } = await supabase
       .from('eventbrite_connections')
@@ -310,10 +317,14 @@ export default function EventDetailPage() {
   const scannerLink = `${siteUrl}/scan/${event.id}`;
   const checkedInCount = attendees.filter((a) => a.checked_in_at).length;
   const chargedCount = attendees.filter((a) => a.charge_status === 'charged').length;
+  const failedChargeCount = attendees.filter((a) => a.charge_status === 'charge_failed').length;
   const pendingCount = attendees.filter((a) => a.charge_status === 'pending').length;
   const invitedCount = attendees.filter((a) => a.charge_status === 'invited').length;
   const totalAttendees = attendees.length;
   const securedCount = totalAttendees - invitedCount;
+  const securedDepositCount = attendees.filter((a) =>
+    ['pending', 'charged', 'not_charged'].includes(a.charge_status)
+  ).length;
   const conversionRate = totalAttendees > 0 ? Math.round((securedCount / totalAttendees) * 100) : null;
   const showUpRate = totalAttendees > 0 ? Math.round((checkedInCount / totalAttendees) * 100) : null;
   const depositAmount = event.deposit_amount_cents / 100;
@@ -328,6 +339,25 @@ export default function EventDetailPage() {
       <p className="text-sm text-ink-soft mb-8">
         {new Date(event.event_date).toLocaleString()} &middot; {event.location}
       </p>
+
+      {(failedChargeCount > 0 || disputeCount > 0) && (
+        <div className="panel p-4 mb-5" style={{ borderColor: 'var(--clay)', background: '#fdf2ef' }}>
+          {failedChargeCount > 0 && (
+            <p className="text-sm" style={{ color: 'var(--clay)' }}>
+              {failedChargeCount} charge{failedChargeCount > 1 ? 's' : ''} failed for this event.
+              Check Stripe for the reason, this could mean an expired or
+              declined card.
+            </p>
+          )}
+          {disputeCount > 0 && (
+            <p className="text-sm mt-1" style={{ color: 'var(--clay)' }}>
+              {disputeCount} dispute{disputeCount > 1 ? 's' : ''} opened against a charge from this
+              event. Check Stripe for details and respond before the
+              deadline shown there.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div className="panel p-4">
@@ -351,6 +381,20 @@ export default function EventDetailPage() {
           <p className="font-display text-2xl">{checkedInCount}/{totalAttendees}</p>
         </div>
       </div>
+
+      {event.status === 'charges_processed' && (
+        <div className="panel p-6 mb-5 text-center">
+          <p className="text-sm text-ink-soft mb-1">
+            {totalAttendees} signups, {securedDepositCount} secured a deposit, {chargedCount} didn&apos;t show.
+          </p>
+          <p className="font-display text-2xl">
+            We recovered <span style={{ color: 'var(--marigold-dark)' }}>${revenueProtected.toFixed(2)}</span> for your event 🎉
+          </p>
+          <p className="text-xs text-ink-soft mt-2">
+            *Gross amount, before Stripe processing and RSVproof service fees.
+          </p>
+        </div>
+      )}
 
       <div className="panel p-5 mb-5 space-y-4">
         <h2 className="font-medium">Settings</h2>
@@ -600,7 +644,12 @@ export default function EventDetailPage() {
                     Resend invite
                   </button>
                 )}
-                <p className="text-xs text-ink-soft mt-1 font-mono">{a.charge_status}</p>
+                <p
+                  className="text-xs mt-1 font-mono"
+                  style={a.charge_status === 'charge_failed' ? { color: 'var(--clay)', fontWeight: 600 } : { color: 'var(--ink-soft)' }}
+                >
+                  {a.charge_status}
+                </p>
               </div>
             </li>
           ))}
