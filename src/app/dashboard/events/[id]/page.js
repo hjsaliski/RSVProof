@@ -20,6 +20,8 @@ export default function EventDetailPage() {
   const [sendingReminders, setSendingReminders] = useState(false);
   const [remindInvitedResult, setRemindInvitedResult] = useState(null);
   const [remindingInvited, setRemindingInvited] = useState(false);
+  const [cancellingEvent, setCancellingEvent] = useState(false);
+  const [cancelEventResult, setCancelEventResult] = useState(null);
   const [eventbriteConnected, setEventbriteConnected] = useState(false);
   const [eventbriteEvents, setEventbriteEvents] = useState([]);
   const [loadingEbEvents, setLoadingEbEvents] = useState(false);
@@ -216,6 +218,35 @@ export default function EventDetailPage() {
       results,
     });
     setRemindingInvited(false);
+  }
+
+  async function cancelEvent() {
+    const confirmed = confirm(
+      `Cancel "${event.name}"? Every attendee's deposit will be released and they'll be notified by email. This can't be undone.`
+    );
+    if (!confirmed) return;
+
+    setCancellingEvent(true);
+    setCancelEventResult(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`/api/events/${id}/cancel`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const json = await res.json();
+      if (json.error) {
+        alert(`Cancellation failed: ${json.error}`);
+      } else {
+        setCancelEventResult(json);
+      }
+    } catch (err) {
+      alert(`Request failed: ${err.message}`);
+    }
+
+    setCancellingEvent(false);
+    await load();
   }
 
   async function runNoShowCharges() {
@@ -576,11 +607,41 @@ export default function EventDetailPage() {
         </ul>
       </div>
 
+      <div className="panel p-5 mb-5" style={{ borderColor: 'var(--clay)' }}>
+        <h2 className="font-medium mb-2">Cancel this event</h2>
+        <p className="text-sm text-ink-soft mb-4">
+          Releases every attendee&apos;s deposit hold and emails them that the
+          event was cancelled. The event and its history stay on your
+          dashboard, just marked cancelled. Use this if the event itself
+          isn&apos;t happening anymore.
+        </p>
+        <button
+          onClick={cancelEvent}
+          disabled={cancellingEvent || event.status === 'cancelled'}
+          className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
+          style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
+        >
+          {event.status === 'cancelled'
+            ? 'Already cancelled'
+            : cancellingEvent
+            ? 'Cancelling...'
+            : 'Cancel event'}
+        </button>
+        {cancelEventResult && (
+          <p className="text-sm text-marigold-dark mt-3">
+            Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
+          </p>
+        )}
+      </div>
+
       <div className="panel p-5" style={{ borderColor: 'var(--clay)' }}>
         <h2 className="font-medium mb-2">Delete this event</h2>
         <p className="text-sm text-ink-soft mb-4">
-          Permanently removes this event and every attendee signup attached to it,
-          including their saved card references. This cannot be undone.
+          Permanently removes this event and every attendee signup attached to
+          it, including their saved card references. This cannot be undone,
+          and unlike cancelling, no one is notified. Only use this for an
+          event that never really happened, like a test, not a real event
+          you&apos;re calling off, use Cancel above for that.
         </p>
         <button
           onClick={deleteEvent}

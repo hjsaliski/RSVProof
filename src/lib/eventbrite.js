@@ -40,7 +40,7 @@ export async function registerEventbriteEventWebhook({
     },
     body: new URLSearchParams({
       endpoint_url: `${origin}/api/eventbrite/webhook?rsvproofEventId=${rsvproofEventId}`,
-      actions: 'order.placed,order.refunded',
+      actions: 'order.placed,order.refunded,event.updated',
       event_id: eventbriteEventId,
     }),
   });

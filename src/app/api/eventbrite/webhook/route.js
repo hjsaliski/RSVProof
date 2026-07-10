@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { resend } from '@/lib/resend';
 import { cancelAttendeeDeposit } from '@/lib/cancelDeposit';
+import { cancelEventAndAttendees } from '@/lib/cancelEvent';
 
 // Eventbrite's webhook payload is intentionally thin, just enough to tell
 // us something happened and where to fetch the real details:
@@ -19,9 +20,9 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => null);
   const action = body?.config?.action;
-  const isHandledAction = action === 'order.placed' || action === 'order.refunded';
+  const handledActions = ['order.placed', 'order.refunded', 'event.updated'];
 
-  if (!rsvproofEventId || !body?.api_url || !isHandledAction) {
+  if (!rsvproofEventId || !body?.api_url || !handledActions.includes(action)) {
     // Acknowledge anything we don't recognize so Eventbrite doesn't retry
     // forever, rather than erroring on actions we're not subscribed to.
     return NextResponse.json({ received: true });
@@ -46,6 +47,30 @@ export async function POST(request) {
 
   if (!connection) {
     console.error('No Eventbrite connection found for organizer:', event.organizer_id);
+    return NextResponse.json({ received: true });
+  }
+
+  if (action === 'event.updated') {
+    // This fires on any edit to the event, not just cancellation, so this
+    // only acts when the status specifically comes back as canceled.
+    const eventRes = await fetch(body.api_url, {
+      headers: { Authorization: `Bearer ${connection.access_token}` },
+    });
+
+    if (!eventRes.ok) {
+      console.error('Fetching Eventbrite event details failed:', await eventRes.text());
+      return NextResponse.json({ received: true });
+    }
+
+    const ebEvent = await eventRes.json();
+    if (ebEvent.status === 'canceled') {
+      try {
+        await cancelEventAndAttendees(event.id);
+      } catch (err) {
+        console.error('Cancelling event from Eventbrite sync failed:', err);
+      }
+    }
+
     return NextResponse.json({ received: true });
   }
 
@@ -149,8 +174,6 @@ async function handleCancelledAttendee(ebAttendee) {
     .single();
 
   if (!attendee) {
-    // No RSVproof row exists for this Eventbrite attendee at all, so
-    // there's nothing here to cancel or release.
     console.error('order.refunded for unknown eventbrite_attendee_id:', ebAttendee.id);
     return;
   }
