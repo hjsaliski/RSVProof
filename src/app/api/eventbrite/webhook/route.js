@@ -53,7 +53,12 @@ export async function POST(request) {
   if (action === 'event.updated') {
     // This fires on any edit to the event, not just cancellation, so this
     // only acts when the status specifically comes back as canceled.
-    const eventRes = await fetch(body.api_url, {
+    // Eventbrite's base "status" field often doesn't reliably flip to
+    // "canceled" when an organizer cancels via the status dropdown, it can
+    // stay at whatever it was before (e.g. "live"). Cancellation instead
+    // shows up in the separate event_sales_status expansion, so both are
+    // checked here to be safe.
+    const eventRes = await fetch(`${body.api_url}?expand=event_sales_status`, {
       headers: { Authorization: `Bearer ${connection.access_token}` },
     });
 
@@ -64,10 +69,14 @@ export async function POST(request) {
 
     const ebEvent = await eventRes.json();
     const rawStatus = ebEvent.status;
-    console.error('event.updated received, raw status value:', JSON.stringify(rawStatus));
+    const salesStatus = ebEvent.event_sales_status?.sales_status;
+    const messageCode = ebEvent.event_sales_status?.message_code;
+    console.error('event.updated debug:', JSON.stringify({ rawStatus, salesStatus, messageCode }));
 
     const normalizedStatus = String(rawStatus || '').toLowerCase();
-    if (normalizedStatus.includes('cancel')) {
+    const isCancelled = normalizedStatus.includes('cancel') || messageCode === 'event_cancelled';
+
+    if (isCancelled) {
       try {
         await cancelEventAndAttendees(event.id);
       } catch (err) {
