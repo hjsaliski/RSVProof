@@ -63,8 +63,11 @@ export async function POST(request) {
     }
 
     const ebEvent = await eventRes.json();
-    console.error('event.updated received, status field is:', ebEvent.status);
-    if (ebEvent.status === 'canceled') {
+    const rawStatus = ebEvent.status;
+    console.error('event.updated received, raw status value:', JSON.stringify(rawStatus));
+
+    const normalizedStatus = String(rawStatus || '').toLowerCase();
+    if (normalizedStatus.includes('cancel')) {
       try {
         await cancelEventAndAttendees(event.id);
       } catch (err) {
