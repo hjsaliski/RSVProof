@@ -64,9 +64,17 @@ export async function checkEventbriteEventCancelled(eventbriteEventId, accessTok
   );
 
   if (!res.ok) {
-    // Don't block charging on an API hiccup, an unreachable check isn't
-    // evidence the event was cancelled. Logged so it's visible if it
-    // happens often.
+    if (res.status === 404) {
+      // The event no longer exists on Eventbrite at all, likely deleted
+      // after being cancelled and refunded. Unlike other failures, this is
+      // itself real evidence the event isn't happening, so it's treated
+      // as cancelled rather than skipped.
+      console.error('Eventbrite event not found (likely deleted), treating as cancelled:', eventbriteEventId);
+      return true;
+    }
+    // Any other failure (auth issue, rate limit, network hiccup) isn't
+    // evidence the event was cancelled, so charging proceeds rather than
+    // blocking on an unrelated API problem.
     console.error('Checking Eventbrite event status failed:', await res.text());
     return false;
   }
