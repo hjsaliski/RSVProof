@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { resend } from '@/lib/resend';
 import { cancelAttendeeDeposit } from '@/lib/cancelDeposit';
 import { cancelEventAndAttendees } from '@/lib/cancelEvent';
+import { getOrganizerBusinessName } from '@/lib/getOrganizerBusinessName';
 
 // Eventbrite's webhook payload is intentionally thin, just enough to tell
 // us something happened and where to fetch the real details:
@@ -200,6 +201,7 @@ async function handleNewAttendee(ebAttendee, event) {
 
   if (!resend) return;
 
+  const businessName = await getOrganizerBusinessName(event.organizer_id);
   const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
   const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
     ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
@@ -213,8 +215,9 @@ async function handleNewAttendee(ebAttendee, event) {
       subject: `One step left to secure your spot: ${event.name}`,
       html: `
         <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
-          <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">Almost there</p>
+          <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f; margin: 0 0 8px;">Almost there</p>
           <h1 style="font-size: 22px; margin: 0 0 4px;">${event.name}</h1>
+          ${businessName ? `<p style="font-size: 13px; color: #a39d8c; margin: 0 0 12px;">Hosted by ${businessName}</p>` : ''}
           <p style="color: #5b574c; margin: 0 0 16px;">You RSVP'd on Eventbrite. One more step secures your spot.</p>
           <div style="background: #fbeecb; border-radius: 10px; padding: 14px; font-size: 14px; margin-bottom: 20px;">
             A ${depositDisplay} hold reserves your spot. Nothing is charged if
@@ -238,6 +241,8 @@ async function notifyAttendeesOfPostponement(event) {
     .eq('event_id', event.id)
     .neq('charge_status', 'cancelled');
 
+  const businessName = await getOrganizerBusinessName(event.organizer_id);
+
   for (const attendee of attendees || []) {
     if (!attendee.email || !resend) continue;
 
@@ -248,8 +253,9 @@ async function notifyAttendeesOfPostponement(event) {
         subject: `Event postponed: ${event.name}`,
         html: `
           <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
-            <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">Postponed</p>
+            <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f; margin: 0 0 8px;">Postponed</p>
             <h1 style="font-size: 22px; margin: 0 0 4px;">${event.name}</h1>
+            ${businessName ? `<p style="font-size: 13px; color: #a39d8c; margin: 0 0 12px;">Hosted by ${businessName}</p>` : ''}
             <p style="color: #5b574c;">
               The organizer has postponed this event. Your deposit is still
               in place, nothing has changed there. The organizer will share

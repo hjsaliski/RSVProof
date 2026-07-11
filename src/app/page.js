@@ -53,6 +53,47 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Two paths in: connect something already in use, or start fresh.
+          This exists specifically so the page doesn't read as "you must
+          build your event listing from scratch here," since that's not
+          true and wasn't visible anywhere before this section. */}
+      <section className="bg-paper-dim">
+        <div className="max-w-5xl mx-auto px-6 py-16">
+          <p className="eyebrow mb-2 text-center">Two ways to start</p>
+          <h2 className="font-display text-2xl md:text-3xl mb-10 text-center max-w-2xl mx-auto">
+            Already posting your event somewhere else? Connect it instead of starting over.
+          </h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="panel p-6 bg-paper">
+              <p className="eyebrow mb-2">Connect a platform</p>
+              <h3 className="font-display text-xl mb-3">Start with Eventbrite</h3>
+              <p className="text-ink-soft mb-4">
+                Already listing your event on Eventbrite? Connect your
+                account and every new RSVP there automatically gets invited
+                to secure a deposit here, no manual re-entry, no separate
+                signup page for you to promote.
+              </p>
+              <a href="/signup" className="text-sm underline text-ink-soft">
+                Connect Eventbrite &rarr;
+              </a>
+            </div>
+            <div className="panel p-6 bg-paper">
+              <p className="eyebrow mb-2">Or start fresh</p>
+              <h3 className="font-display text-xl mb-3">Create directly in RSVproof</h3>
+              <p className="text-ink-soft mb-4">
+                No listing anywhere yet? Create your event here instead,
+                share one signup link wherever you already promote,
+                Instagram, a group chat, a flyer with a QR code, and
+                RSVproof handles the deposit and check-in from there.
+              </p>
+              <a href="/signup" className="text-sm underline text-ink-soft">
+                Create your first event &rarr;
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* How it works: two lanes, organizer and attendee, since they read
           this page for different reasons */}
       <section className="max-w-5xl mx-auto px-6 py-16 grid md:grid-cols-2 gap-10">

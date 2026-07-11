@@ -192,6 +192,11 @@ function AttendeeSignupPageInner() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={qrDataUrl} alt="Your check-in QR code" className="mx-auto rounded-lg" />
               )}
+              <p className="text-xs text-ink-soft mt-4">
+                {email
+                  ? "Screenshot this page, or check your email, we sent a copy of your ticket there too."
+                  : 'Screenshot this page so you have your check-in code at the event.'}
+              </p>
             </div>
           ) : (
             <>

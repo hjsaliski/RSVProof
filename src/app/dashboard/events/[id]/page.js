@@ -11,8 +11,11 @@ export default function EventDetailPage() {
   const [attendees, setAttendees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingNotify, setSavingNotify] = useState(false);
+  const [copiedLink, setCopiedLink] = useState('');
   const [depositInput, setDepositInput] = useState('');
   const [savingDeposit, setSavingDeposit] = useState(false);
+  const [depositSaved, setDepositSaved] = useState(false);
   const [siteUrl, setSiteUrl] = useState('');
   const [chargeResult, setChargeResult] = useState(null);
   const [charging, setCharging] = useState(false);
@@ -146,12 +149,41 @@ export default function EventDetailPage() {
     setSaving(false);
   }
 
+  async function toggleNotifyOnSignup() {
+    setSavingNotify(true);
+    await supabase
+      .from('events')
+      .update({ notify_on_signup: !event.notify_on_signup })
+      .eq('id', id);
+    await load();
+    setSavingNotify(false);
+  }
+
+  async function copyToClipboard(text, key) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedLink(key);
+      setTimeout(() => setCopiedLink(''), 1500);
+    } catch (err) {
+      console.error('Copy failed:', err);
+      alert('Could not copy automatically, select and copy the link manually.');
+    }
+  }
+
   async function saveDepositAmount() {
     const cents = Math.round(parseFloat(depositInput) * 100);
     if (isNaN(cents) || cents < 0) {
       alert('Enter a valid deposit amount.');
+      // Revert to the last saved value rather than leaving a broken
+      // number sitting in the field.
+      setDepositInput(event.deposit_amount_cents != null ? (event.deposit_amount_cents / 100).toFixed(2) : '');
       return;
     }
+
+    // Skip the write entirely if nothing actually changed, no point
+    // hitting the database just because they clicked in and back out.
+    if (cents === event.deposit_amount_cents) return;
+
     setSavingDeposit(true);
     await supabase
       .from('events')
@@ -159,6 +191,8 @@ export default function EventDetailPage() {
       .eq('id', id);
     await load();
     setSavingDeposit(false);
+    setDepositSaved(true);
+    setTimeout(() => setDepositSaved(false), 1500);
   }
 
   async function manualCheckIn(attendeeId) {
@@ -329,10 +363,9 @@ export default function EventDetailPage() {
   const showUpRate = totalAttendees > 0 ? Math.round((checkedInCount / totalAttendees) * 100) : null;
   const depositAmount = event.deposit_amount_cents / 100;
   const revenueProtected = chargedCount * depositAmount;
-  const atRisk = pendingCount * depositAmount;
 
   return (
-    <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-10">
+    <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
       <a href="/dashboard" className="text-sm underline text-ink-soft">&larr; Back to events</a>
       <p className="eyebrow mt-4 mb-1">Event</p>
       <h1 className="font-display text-3xl mb-1">{event.name}</h1>
@@ -365,20 +398,25 @@ export default function EventDetailPage() {
           <p className="font-display text-2xl">{totalAttendees}</p>
         </div>
         <div className="panel p-4">
-          <p className="eyebrow mb-1">Show-up rate</p>
-          <p className="font-display text-2xl">{showUpRate === null ? '—' : `${showUpRate}%`}</p>
-        </div>
-        <div className="panel p-4">
-          <p className="eyebrow mb-1">
-            {event.status === 'charges_processed' ? 'Recovered' : 'RSVP $'}
-          </p>
-          <p className="font-display text-2xl font-mono">
-            ${(event.status === 'charges_processed' ? revenueProtected : atRisk).toFixed(2)}
-          </p>
+          {event.status === 'charges_processed' ? (
+            <>
+              <p className="eyebrow mb-1">Recovered</p>
+              <p className="font-display text-2xl font-mono">${revenueProtected.toFixed(2)}</p>
+            </>
+          ) : (
+            <>
+              <p className="eyebrow mb-1">Deposits secured</p>
+              <p className="font-display text-2xl">{pendingCount}/{totalAttendees}</p>
+            </>
+          )}
         </div>
         <div className="panel p-4">
           <p className="eyebrow mb-1">Checked in</p>
           <p className="font-display text-2xl">{checkedInCount}/{totalAttendees}</p>
+        </div>
+        <div className="panel p-4">
+          <p className="eyebrow mb-1">Show-up rate</p>
+          <p className="font-display text-2xl">{showUpRate === null ? '—' : `${showUpRate}%`}</p>
         </div>
       </div>
 
@@ -396,317 +434,393 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      <div className="panel p-5 mb-5 space-y-4">
-        <h2 className="font-medium">Settings</h2>
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-ink-soft">Deposits enabled for this event</span>
-          <button
-            onClick={toggleDeposits}
-            disabled={saving}
-            className={`text-sm px-3 py-1 rounded-full font-medium ${
-              event.deposit_enabled ? 'bg-marigold text-ink' : 'bg-paper-dim text-ink-soft'
-            }`}
-          >
-            {event.deposit_enabled ? 'On' : 'Off'}
-          </button>
-        </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-ink-soft">Deposit amount</span>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-ink-soft">$</span>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={depositInput}
-              onChange={(e) => setDepositInput(e.target.value)}
-              className="field px-2 py-1 text-sm font-mono w-20"
-            />
-            <button
-              type="button"
-              onClick={saveDepositAmount}
-              disabled={savingDeposit}
-              className="text-xs underline text-ink-soft disabled:opacity-50"
-            >
-              {savingDeposit ? 'Saving...' : 'Save'}
-            </button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+        <div className="lg:col-span-2 space-y-5">
+          <div className="panel p-5 space-y-4">
+            <h2 className="font-medium">Settings</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-sm text-ink-soft block">Deposits enabled for this event</span>
+                <span
+                  className="text-xs font-semibold"
+                  style={{ color: event.deposit_enabled ? '#16a34a' : 'var(--ink-soft)' }}
+                >
+                  {event.deposit_enabled ? 'On' : 'Off'}
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={event.deposit_enabled}
+                onClick={toggleDeposits}
+                disabled={saving}
+                className="relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ background: event.deposit_enabled ? '#22c55e' : '#d1d5db' }}
+              >
+                <span
+                  className="inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-150"
+                  style={{ transform: event.deposit_enabled ? 'translateX(22px)' : 'translateX(4px)' }}
+                />
+              </button>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-ink-soft">Deposit amount</span>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-ink-soft">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={depositInput}
+                  onChange={(e) => setDepositInput(e.target.value)}
+                  onBlur={saveDepositAmount}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.target.blur();
+                    if (e.key === 'Escape') {
+                      setDepositInput(event.deposit_amount_cents != null ? (event.deposit_amount_cents / 100).toFixed(2) : '');
+                      e.target.blur();
+                    }
+                  }}
+                  className="deposit-amount-input font-mono font-medium text-sm w-20 px-2 py-1 rounded-md border bg-white text-right outline-none focus:shadow-sm transition-shadow duration-150"
+                  style={{ borderColor: 'var(--line)', color: '#16a34a' }}
+                />
+                {savingDeposit && <span className="text-xs text-ink-soft">Saving...</span>}
+                {depositSaved && (
+                  <span className="text-xs" style={{ color: '#16a34a' }}>Saved</span>
+                )}
+              </div>
+            </div>
+            <style>{`
+              .deposit-amount-input::-webkit-outer-spin-button,
+              .deposit-amount-input::-webkit-inner-spin-button {
+                -webkit-appearance: none;
+                margin: 0;
+              }
+              .deposit-amount-input {
+                -moz-appearance: textfield;
+              }
+            `}</style>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-ink-soft">Check-in cutoff</span>
+              <span className="font-mono font-medium">{new Date(event.checkin_cutoff).toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-line pt-3">
+              <div>
+                <span className="text-sm text-ink-soft block">Email me on every signup</span>
+                <span className="text-xs text-ink-soft">
+                  Off by default, for a popular event this can mean a lot of email.
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={toggleNotifyOnSignup}
+                disabled={savingNotify}
+                className={`shrink-0 text-sm px-3 py-1 rounded-full font-medium disabled:opacity-50 ${
+                  event.notify_on_signup ? 'bg-marigold text-ink' : 'bg-paper-dim text-ink-soft'
+                }`}
+              >
+                {event.notify_on_signup ? 'On' : 'Off'}
+              </button>
+            </div>
+            <p className="text-xs text-ink-soft border-t border-line pt-3">
+              Anyone not checked in by the cutoff will be charged the deposit amount.
+            </p>
+          </div>
+
+          <div className="panel p-5 space-y-3">
+            <h2 className="font-medium">Eventbrite</h2>
+            {event.eventbrite_event_id ? (
+              <p className="text-sm text-marigold-dark">
+                Linked. New RSVPs on Eventbrite will automatically get invited to
+                secure a deposit here.
+              </p>
+            ) : !eventbriteConnected ? (
+              <p className="text-sm text-ink-soft">
+                Connect your Eventbrite account first, from{' '}
+                <a href="/dashboard/connect" className="underline">Connect a platform</a>,
+                then come back here to link this specific event.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-ink-soft">
+                  Link this event to one of your Eventbrite events, so new RSVPs
+                  there automatically get invited to secure a deposit here.
+                </p>
+                {eventbriteEvents.length === 0 ? (
+                  <button
+                    onClick={loadEventbriteEvents}
+                    disabled={loadingEbEvents}
+                    className="text-sm px-4 py-2 rounded-lg border border-line text-ink-soft disabled:opacity-50"
+                  >
+                    {loadingEbEvents ? 'Loading...' : 'Load my Eventbrite events'}
+                  </button>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={linkingId}
+                      onChange={(e) => setLinkingId(e.target.value)}
+                      className="field px-3 py-2 text-sm"
+                    >
+                      <option value="">Select an Eventbrite event</option>
+                      {eventbriteEvents.map((e) => (
+                        <option key={e.id} value={e.id}>{e.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={linkEventbrite}
+                      disabled={!linkingId || linking}
+                      className="btn-marigold text-sm px-4 py-2 disabled:opacity-50"
+                    >
+                      {linking ? 'Linking...' : 'Link'}
+                    </button>
+                  </div>
+                )}
+                {linkError && <p className="text-clay text-sm">{linkError}</p>}
+              </div>
+            )}
+          </div>
+
+          <div className="panel p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-medium">Manage this event</h2>
+              <a href="/dashboard/guide#reminders" className="text-xs underline text-ink-soft">
+                Full guide &rarr;
+              </a>
+            </div>
+
+            <div className="pb-5 mb-5 border-b border-line">
+              <h3 className="text-sm font-semibold mb-1">Reminders <span className="text-ink-soft font-normal">(automatic)</span></h3>
+              <p className="text-sm text-ink-soft mb-3">
+                Sends immediately instead of waiting for today&apos;s scheduled run.
+              </p>
+              <button
+                onClick={sendReminders}
+                disabled={sendingReminders}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: 'var(--marigold-dark)' }}
+              >
+                {sendingReminders ? 'Sending...' : 'Send reminders now'}
+              </button>
+              {reminderResult && (
+                <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+                  {JSON.stringify(reminderResult, null, 2)}
+                </pre>
+              )}
+            </div>
+
+            <div className="pb-5 mb-5 border-b border-line">
+              <h3 className="text-sm font-semibold mb-1">Invited, not yet secured <span className="text-ink-soft font-normal">(manual only)</span></h3>
+              <p className="text-sm text-ink-soft mb-3">
+                RSVP&apos;d on a connected platform, but hasn&apos;t secured a deposit yet.
+              </p>
+              <p className="font-display text-2xl mb-3">{invitedCount}</p>
+              <button
+                onClick={remindAllInvited}
+                disabled={remindingInvited || invitedCount === 0}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: 'var(--marigold-dark)' }}
+              >
+                {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
+              </button>
+              {remindInvitedResult && (
+                <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+                  {JSON.stringify(remindInvitedResult, null, 2)}
+                </pre>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
+              <p className="text-sm text-ink-soft mb-3">
+                Runs immediately instead of waiting for today&apos;s scheduled run.
+              </p>
+              <button
+                onClick={runNoShowCharges}
+                disabled={charging || event.status === 'charges_processed'}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                style={{ background: 'var(--clay)' }}
+              >
+                {event.status === 'charges_processed'
+                  ? 'Already processed'
+                  : charging
+                  ? 'Processing...'
+                  : 'Run no-show charges'}
+              </button>
+              {chargeResult && (
+                <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+                  {JSON.stringify(chargeResult, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+
+          {event.eventbrite_event_id && (
+            <div className="panel p-5">
+              <h2 className="font-medium mb-2">Eventbrite conversion</h2>
+              <p className="text-sm text-ink-soft mb-4">
+                Of the signups shown above, here&apos;s how many actually secured
+                a deposit instead of staying a no-show risk with nothing backing it.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="eyebrow mb-1">Secured a deposit</p>
+                  <p className="font-display text-2xl">{securedCount}</p>
+                </div>
+                <div>
+                  <p className="eyebrow mb-1">Conversion</p>
+                  <p className="font-display text-2xl">
+                    {conversionRate === null ? '—' : `${conversionRate}%`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="panel p-5">
+            <h2 className="font-medium mb-3">Attendees</h2>
+            {attendees.length === 0 && (
+              <p className="text-sm text-ink-soft">No signups yet.</p>
+            )}
+            <ul className="divide-y divide-line">
+              {attendees.map((a) => (
+                <li key={a.id} className="py-3 flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-medium">{a.name}</p>
+                    <p className="text-xs text-ink-soft">{a.email || a.phone}</p>
+                  </div>
+                  <div className="text-right">
+                    {a.checked_in_at ? (
+                      <span className="text-xs text-marigold-dark font-medium">
+                        Checked in ({a.checked_in_method})
+                      </span>
+                    ) : a.charge_status === 'cancelled' ? (
+                      <span className="text-xs text-ink-soft">Deposit cancelled</span>
+                    ) : (
+                      <button
+                        onClick={() => manualCheckIn(a.id)}
+                        className="text-xs underline text-ink-soft"
+                      >
+                        Mark checked in
+                      </button>
+                    )}
+                    {a.charge_status === 'invited' && (
+                      <button
+                        onClick={() => resendInvite(a.id)}
+                        className="text-xs underline text-ink-soft block mt-1"
+                      >
+                        Resend invite
+                      </button>
+                    )}
+                    <p
+                      className="text-xs mt-1 font-mono"
+                      style={a.charge_status === 'charge_failed' ? { color: 'var(--clay)', fontWeight: 600 } : { color: 'var(--ink-soft)' }}
+                    >
+                      {a.charge_status}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="panel p-5" style={{ borderColor: 'var(--clay)', borderWidth: '1.5px' }}>
+            <h2 className="font-semibold mb-4" style={{ color: 'var(--clay)' }}>Danger zone</h2>
+
+            <div className="pb-5 mb-5 border-b" style={{ borderColor: 'var(--clay)' }}>
+              <h3 className="text-sm font-semibold mb-1">Cancel this event</h3>
+              <p className="text-sm text-ink-soft mb-3">
+                Releases every attendee&apos;s deposit hold and emails them that the
+                event was cancelled. The event and its history stay on your
+                dashboard, just marked cancelled.
+              </p>
+              {event.eventbrite_event_id && (
+                <p className="text-sm text-ink-soft mb-3 border-l-2 pl-3" style={{ borderColor: 'var(--clay)' }}>
+                  This event is linked to Eventbrite. Cancelling here only cancels
+                  the deposit side, it does not cancel the event or tickets on
+                  Eventbrite. If you also cancel or delete this event on
+                  Eventbrite, you&apos;ll need to cancel it here separately too,
+                  since syncing between the two isn&apos;t fully reliable yet.
+                </p>
+              )}
+              <button
+                onClick={cancelEvent}
+                disabled={cancellingEvent || event.status === 'cancelled'}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
+                style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
+              >
+                {event.status === 'cancelled'
+                  ? 'Already cancelled'
+                  : cancellingEvent
+                  ? 'Cancelling...'
+                  : 'Cancel event'}
+              </button>
+              {cancelEventResult && (
+                <p className="text-sm text-marigold-dark mt-3">
+                  Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
+                </p>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold mb-1">Delete this event</h3>
+              <p className="text-sm text-ink-soft mb-3">
+                Permanently removes this event and every attendee signup attached to
+                it, including their saved card references. This cannot be undone,
+                and unlike cancelling, no one is notified. Only use this for an
+                event that never really happened, like a test, not a real event
+                you&apos;re calling off, use Cancel above for that.
+              </p>
+              <button
+                onClick={deleteEvent}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold border"
+                style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
+              >
+                Delete event
+              </button>
+            </div>
           </div>
         </div>
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-ink-soft">Check-in cutoff</span>
-          <span className="font-mono font-medium">{new Date(event.checkin_cutoff).toLocaleString()}</span>
-        </div>
-        <p className="text-xs text-ink-soft border-t border-line pt-3">
-          Anyone not checked in by the cutoff will be charged the deposit amount.
-        </p>
-      </div>
 
-      <div className="panel p-5 mb-5 space-y-3">
-        <h2 className="font-medium">Eventbrite</h2>
-        {event.eventbrite_event_id ? (
-          <p className="text-sm text-marigold-dark">
-            Linked. New RSVPs on Eventbrite will automatically get invited to
-            secure a deposit here.
-          </p>
-        ) : !eventbriteConnected ? (
-          <p className="text-sm text-ink-soft">
-            Connect your Eventbrite account first, from{' '}
-            <a href="/dashboard/connect" className="underline">Connect a platform</a>,
-            then come back here to link this specific event.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-ink-soft">
-              Link this event to one of your Eventbrite events, so new RSVPs
-              there automatically get invited to secure a deposit here.
-            </p>
-            {eventbriteEvents.length === 0 ? (
-              <button
-                onClick={loadEventbriteEvents}
-                disabled={loadingEbEvents}
-                className="text-sm px-4 py-2 rounded-lg border border-line text-ink-soft disabled:opacity-50"
-              >
-                {loadingEbEvents ? 'Loading...' : 'Load my Eventbrite events'}
-              </button>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={linkingId}
-                  onChange={(e) => setLinkingId(e.target.value)}
-                  className="field px-3 py-2 text-sm"
-                >
-                  <option value="">Select an Eventbrite event</option>
-                  {eventbriteEvents.map((e) => (
-                    <option key={e.id} value={e.id}>{e.name}</option>
-                  ))}
-                </select>
+        <aside className="lg:col-span-1">
+          <div className="lg:sticky lg:top-6 space-y-3">
+            {!event.eventbrite_event_id && (
+              <div className="panel p-4">
+                <p className="text-xs text-ink-soft mb-1.5">Signup link</p>
+                <p className="text-xs text-ink-soft mb-2">Post this on Instagram, etc.</p>
+                <code className="font-mono text-xs bg-paper-dim px-3 py-2 rounded-lg block break-all mb-2">
+                  {signupLink}
+                </code>
                 <button
-                  onClick={linkEventbrite}
-                  disabled={!linkingId || linking}
-                  className="btn-marigold text-sm px-4 py-2 disabled:opacity-50"
+                  type="button"
+                  onClick={() => copyToClipboard(signupLink, 'signup')}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
                 >
-                  {linking ? 'Linking...' : 'Link'}
+                  {copiedLink === 'signup' ? 'Copied' : 'Copy link'}
                 </button>
               </div>
             )}
-            {linkError && <p className="text-clay text-sm">{linkError}</p>}
-          </div>
-        )}
-      </div>
-
-      <div className="panel p-5 mb-5 space-y-3">
-        <h2 className="font-medium">Share these links</h2>
-        <div>
-          <p className="text-sm text-ink-soft mb-1">Signup link (post this on Instagram, etc.)</p>
-          <code className="font-mono text-xs bg-paper-dim px-3 py-2 rounded-lg block break-all">
-            {signupLink}
-          </code>
-        </div>
-        <div>
-          <p className="text-sm text-ink-soft mb-1">Door scanner (open this on your phone at the event)</p>
-          <code className="font-mono text-xs bg-paper-dim px-3 py-2 rounded-lg block break-all">
-            {scannerLink}
-          </code>
-        </div>
-      </div>
-
-      <div className="panel p-5 mb-5">
-        <h2 className="font-medium mb-2">No-show charges</h2>
-        <p className="text-sm text-ink-soft mb-4">
-          Run this after the check-in cutoff has passed. It charges the deposit for
-          everyone who was not checked in, and marks everyone else as not charged.
-          This only needs to be run once per event.
-        </p>
-        <button
-          onClick={runNoShowCharges}
-          disabled={charging || event.status === 'charges_processed'}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-          style={{ background: 'var(--clay)' }}
-        >
-          {event.status === 'charges_processed'
-            ? 'Already processed'
-            : charging
-            ? 'Processing...'
-            : 'Run no-show charges'}
-        </button>
-        {chargeResult && (
-          <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-            {JSON.stringify(chargeResult, null, 2)}
-          </pre>
-        )}
-      </div>
-
-      <div className="panel p-5 mb-5">
-        <h2 className="font-medium mb-2">Reminders</h2>
-        <p className="text-sm text-ink-soft mb-4">
-          Emails anyone who hasn&apos;t checked in and hasn&apos;t been reminded yet,
-          once the event is starting within 24 hours. Safe to click more than
-          once, each attendee only ever gets one reminder.
-        </p>
-        <button
-          onClick={sendReminders}
-          disabled={sendingReminders}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-          style={{ background: 'var(--marigold-dark)' }}
-        >
-          {sendingReminders ? 'Sending...' : 'Send reminders now'}
-        </button>
-        {reminderResult && (
-          <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-            {JSON.stringify(reminderResult, null, 2)}
-          </pre>
-        )}
-      </div>
-
-      <div className="panel p-5 mb-5">
-        <h2 className="font-medium mb-2">Invited, not yet secured</h2>
-        <p className="text-sm text-ink-soft mb-4">
-          People who RSVP&apos;d on a connected platform like Eventbrite but
-          haven&apos;t secured their deposit yet. Sends the same invite email
-          they already got once.
-        </p>
-        <p className="font-display text-2xl mb-4">{invitedCount}</p>
-        <button
-          onClick={remindAllInvited}
-          disabled={remindingInvited || invitedCount === 0}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-          style={{ background: 'var(--marigold-dark)' }}
-        >
-          {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
-        </button>
-        {remindInvitedResult && (
-          <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-            {JSON.stringify(remindInvitedResult, null, 2)}
-          </pre>
-        )}
-      </div>
-
-      {event.eventbrite_event_id && (
-        <div className="panel p-5 mb-5">
-          <h2 className="font-medium mb-2">Eventbrite RSVP conversion</h2>
-          <p className="text-sm text-ink-soft mb-4">
-            Before RSVproof, every one of these RSVPs was a no-show risk with
-            nothing backing it. Here&apos;s how many actually secured a deposit.
-          </p>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <p className="eyebrow mb-1">RSVP&apos;d on Eventbrite</p>
-              <p className="font-display text-2xl">{totalAttendees}</p>
+            <div className="panel p-4">
+              <p className="text-xs text-ink-soft mb-1.5">Door scanner</p>
+              <p className="text-xs text-ink-soft mb-2">Open this on your phone at the event.</p>
+              <code className="font-mono text-xs bg-paper-dim px-3 py-2 rounded-lg block break-all mb-2">
+                {scannerLink}
+              </code>
+              <button
+                type="button"
+                onClick={() => copyToClipboard(scannerLink, 'scanner')}
+                className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+              >
+                {copiedLink === 'scanner' ? 'Copied' : 'Copy link'}
+              </button>
             </div>
-            <div>
-              <p className="eyebrow mb-1">Secured a deposit</p>
-              <p className="font-display text-2xl">{securedCount}</p>
-            </div>
-            <div>
-              <p className="eyebrow mb-1">Conversion</p>
-              <p className="font-display text-2xl">
-                {conversionRate === null ? '—' : `${conversionRate}%`}
+            {event.eventbrite_event_id && (
+              <p className="text-xs text-ink-soft px-1">
+                No RSVproof signup link for this event, attendees RSVP on
+                Eventbrite and get invited from there automatically.
               </p>
-            </div>
+            )}
           </div>
-        </div>
-      )}
-
-      <div className="panel p-5 mb-5">
-        <h2 className="font-medium mb-3">
-          Attendees <span className="text-ink-soft font-normal">({checkedInCount} / {attendees.length} checked in)</span>
-        </h2>
-        {attendees.length === 0 && (
-          <p className="text-sm text-ink-soft">No signups yet.</p>
-        )}
-        <ul className="divide-y divide-line">
-          {attendees.map((a) => (
-            <li key={a.id} className="py-3 flex justify-between items-center">
-              <div>
-                <p className="text-sm font-medium">{a.name}</p>
-                <p className="text-xs text-ink-soft">{a.email || a.phone}</p>
-              </div>
-              <div className="text-right">
-                {a.checked_in_at ? (
-                  <span className="text-xs text-marigold-dark font-medium">
-                    Checked in ({a.checked_in_method})
-                  </span>
-                ) : a.charge_status === 'cancelled' ? (
-                  <span className="text-xs text-ink-soft">Deposit cancelled</span>
-                ) : (
-                  <button
-                    onClick={() => manualCheckIn(a.id)}
-                    className="text-xs underline text-ink-soft"
-                  >
-                    Mark checked in
-                  </button>
-                )}
-                {a.charge_status === 'invited' && (
-                  <button
-                    onClick={() => resendInvite(a.id)}
-                    className="text-xs underline text-ink-soft block mt-1"
-                  >
-                    Resend invite
-                  </button>
-                )}
-                <p
-                  className="text-xs mt-1 font-mono"
-                  style={a.charge_status === 'charge_failed' ? { color: 'var(--clay)', fontWeight: 600 } : { color: 'var(--ink-soft)' }}
-                >
-                  {a.charge_status}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="panel p-5 mb-5" style={{ borderColor: 'var(--clay)' }}>
-        <h2 className="font-medium mb-2">Cancel this event</h2>
-        <p className="text-sm text-ink-soft mb-4">
-          Releases every attendee&apos;s deposit hold and emails them that the
-          event was cancelled. The event and its history stay on your
-          dashboard, just marked cancelled.
-        </p>
-        {event.eventbrite_event_id && (
-          <p className="text-sm text-ink-soft mb-4 border-l-2 pl-3" style={{ borderColor: 'var(--clay)' }}>
-            This event is linked to Eventbrite. Cancelling here only cancels
-            the deposit side, it does not cancel the event or tickets on
-            Eventbrite. If you also cancel or delete this event on
-            Eventbrite, you&apos;ll need to cancel it here separately too,
-            since syncing between the two isn&apos;t fully reliable yet.
-          </p>
-        )}
-        <button
-          onClick={cancelEvent}
-          disabled={cancellingEvent || event.status === 'cancelled'}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
-          style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
-        >
-          {event.status === 'cancelled'
-            ? 'Already cancelled'
-            : cancellingEvent
-            ? 'Cancelling...'
-            : 'Cancel event'}
-        </button>
-        {cancelEventResult && (
-          <p className="text-sm text-marigold-dark mt-3">
-            Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
-          </p>
-        )}
-      </div>
-
-      <div className="panel p-5" style={{ borderColor: 'var(--clay)' }}>
-        <h2 className="font-medium mb-2">Delete this event</h2>
-        <p className="text-sm text-ink-soft mb-4">
-          Permanently removes this event and every attendee signup attached to
-          it, including their saved card references. This cannot be undone,
-          and unlike cancelling, no one is notified. Only use this for an
-          event that never really happened, like a test, not a real event
-          you&apos;re calling off, use Cancel above for that.
-        </p>
-        <button
-          onClick={deleteEvent}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold border"
-          style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
-        >
-          Delete event
-        </button>
+        </aside>
       </div>
     </main>
   );

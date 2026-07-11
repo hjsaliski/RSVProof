@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabaseClient';
 
 // Friendly labels for each event source. Falls back to a capitalized
@@ -68,11 +69,23 @@ export default function DashboardPage() {
           <p className="eyebrow mb-1">Organizer dashboard</p>
           <h1 className="font-display text-3xl">Your events</h1>
         </div>
-        <div className="flex items-center gap-4">
-          <a href="/dashboard/profile" className="text-sm underline text-ink-soft">
+        <div className="flex items-center gap-2">
+          <a
+            href="/dashboard/guide"
+            className="text-sm px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+          >
+            How-to Guide
+          </a>
+          <a
+            href="/dashboard/profile"
+            className="text-sm px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+          >
             Profile
           </a>
-          <button onClick={handleLogout} className="text-sm underline text-ink-soft">
+          <button
+            onClick={handleLogout}
+            className="text-sm px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+          >
             Log out
           </button>
         </div>
@@ -128,26 +141,39 @@ export default function DashboardPage() {
 
       <ul className="space-y-3">
         {visibleEvents.map((event) => (
-          <li key={event.id} className="panel p-5 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <a href={`/dashboard/events/${event.id}`} className="font-medium hover:underline">
-                  {event.name}
-                </a>
-                <span className="eyebrow" style={{ fontSize: '0.65rem' }}>
-                  {sourceLabel(event.source)}
+          <li key={event.id}>
+            <Link
+              href={`/dashboard/events/${event.id}`}
+              className="panel p-5 flex items-center justify-between hover:border-ink transition-colors duration-150"
+            >
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{event.name}</span>
+                  <span className="eyebrow" style={{ fontSize: '0.65rem' }}>
+                    {sourceLabel(event.source)}
+                  </span>
+                </div>
+                <p className="text-sm text-ink-soft mt-1">
+                  {new Date(event.event_date).toLocaleString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-mono text-sm mb-1.5">${(event.deposit_amount_cents / 100).toFixed(2)}</p>
+                <span
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+                  style={{
+                    background: event.deposit_enabled ? '#dcfce7' : '#f3f4f6',
+                    color: event.deposit_enabled ? '#16a34a' : 'var(--ink-soft)',
+                  }}
+                >
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full"
+                    style={{ background: event.deposit_enabled ? '#22c55e' : '#9ca3af' }}
+                  />
+                  {event.deposit_enabled ? 'Deposits on' : 'Deposits off'}
                 </span>
               </div>
-              <p className="text-sm text-ink-soft mt-1">
-                {new Date(event.event_date).toLocaleString()}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="font-mono text-sm">${(event.deposit_amount_cents / 100).toFixed(2)}</p>
-              <p className={`text-xs mt-1 ${event.deposit_enabled ? 'text-marigold-dark' : 'text-ink-soft'}`}>
-                {event.deposit_enabled ? 'Deposits on' : 'Deposits off'}
-              </p>
-            </div>
+            </Link>
           </li>
         ))}
       </ul>

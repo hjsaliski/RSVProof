@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { resend } from '@/lib/resend';
+import { getOrganizerBusinessName } from '@/lib/getOrganizerBusinessName';
 
 export async function POST(request) {
   const body = await request.json();
@@ -72,18 +73,37 @@ export async function POST(request) {
   // itself, since the on-screen QR code already works on its own.
   if (attendeeEmail && resend) {
     try {
+      // notify_on_signup lives on the event itself now, not on the
+      // organizer's profile, since it's set per-event from the event's
+      // Settings panel rather than as a single account-wide preference.
       const { data: event } = await supabaseAdmin
         .from('events')
-        .select('name, event_date, location, deposit_amount_cents, organizer_id')
+        .select('name, event_date, location, deposit_amount_cents, organizer_id, notify_on_signup')
         .eq('id', eventId)
         .single();
 
       if (event) {
+        const businessName = await getOrganizerBusinessName(event.organizer_id);
         const qrPayload = JSON.stringify({ eventId, token: qrToken });
         const qrBuffer = await QRCode.toBuffer(qrPayload, {
           width: 400,
           color: { dark: '#1c1b17', light: '#ffffff' },
         });
+
+        // Uploaded to a public bucket so it can be embedded as a real
+        // <img src="..."> in the email body. CID-embedded attachments
+        // don't render in Gmail's web client, it doesn't resolve cid:
+        // references at all, so a hosted URL is the only reliable way
+        // to show the QR code directly inside the email itself.
+        const qrStoragePath = `${qrToken}.png`;
+        await supabaseAdmin.storage
+          .from('qr-codes')
+          .upload(qrStoragePath, qrBuffer, { contentType: 'image/png', upsert: true });
+        const { data: qrPublicUrlData } = supabaseAdmin.storage
+          .from('qr-codes')
+          .getPublicUrl(qrStoragePath);
+        const qrImageUrl = qrPublicUrlData.publicUrl;
+
         const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
         const eventDateDisplay = new Date(event.event_date).toLocaleString();
         const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
@@ -97,40 +117,47 @@ export async function POST(request) {
           subject: `You're confirmed: ${event.name}`,
           html: `
             <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
-              <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">Reservation</p>
-              <h1 style="font-size: 22px; margin: 0 0 4px;">${event.name}</h1>
-              <p style="color: #5b574c; margin: 0 0 2px;">${eventDateDisplay}</p>
-              <p style="color: #5b574c; margin: 0 0 16px;">${event.location}</p>
-              <div style="background: #fbeecb; border-radius: 10px; padding: 14px; font-size: 14px; margin-bottom: 20px;">
-                A ${depositDisplay} hold reserves your spot. Show the attached QR
-                code when you check in and nothing is charged. Miss it without
-                checking in by the cutoff, and your card is charged ${depositDisplay}.
+              <div style="border: 1px solid #e5decf; border-radius: 16px; overflow: hidden; background: #ffffff;">
+                <div style="padding: 24px;">
+                  <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f; margin: 0 0 8px;">Reservation</p>
+                  <h1 style="font-size: 22px; margin: 0 0 4px; color: #1c1b17;">${event.name}</h1>
+                  ${businessName ? `<p style="font-size: 13px; color: #a39d8c; margin: 0 0 8px;">Hosted by ${businessName}</p>` : ''}
+                  <p style="color: #5b574c; margin: 0 0 2px; font-size: 14px;">${eventDateDisplay}</p>
+                  <p style="color: #5b574c; margin: 0; font-size: 14px;">${event.location}</p>
+                </div>
+                <div style="border-top: 1px dashed #d8cfb8;"></div>
+                <div style="padding: 24px; text-align: center;">
+                  <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f; margin: 0 0 8px;">You're confirmed</p>
+                  <p style="font-size: 14px; color: #5b574c; margin: 0 0 16px;">
+                    Show this code when you check in. Your ${depositDisplay}
+                    hold is released once you're scanned in.
+                  </p>
+                  <img src="${qrImageUrl}" alt="Your check-in QR code" width="220" height="220" style="display: block; margin: 0 auto 16px; border-radius: 8px;" />
+                  <p style="font-size: 12px; color: #a39d8c; margin: 0;">
+                    Can't make it? <a href="${cancelLink}" style="color: #a39d8c;">Cancel your deposit</a>
+                  </p>
+                </div>
               </div>
-              <p style="font-size: 13px; color: #5b574c;">Your check-in code is attached to this email.</p>
-              <p style="font-size: 12px; color: #a39d8c; margin-top: 20px;">
-                Can't make it? <a href="${cancelLink}" style="color: #a39d8c;">Cancel your deposit</a>
-              </p>
             </div>
           `,
-          attachments: [
-            {
-              filename: 'check-in-code.png',
-              content: qrBuffer.toString('base64'),
-            },
-          ],
+          // Attachment disabled, the QR is already visible directly in the
+          // email body above, and a screenshot covers the offline case.
+          // Left here, commented, in case that tradeoff ever needs to flip
+          // back, just uncomment to restore the attached copy.
+          // attachments: [
+          //   {
+          //     filename: 'check-in-code.png',
+          //     content: qrBuffer.toString('base64'),
+          //   },
+          // ],
         });
 
-        // Notify the organizer too, but only if they've opted in, since a
-        // popular event could otherwise mean hundreds of emails to the
-        // organizer for something they can just check on their dashboard.
-        try {
-          const { data: profile } = await supabaseAdmin
-            .from('organizer_profiles')
-            .select('notify_on_signup')
-            .eq('id', event.organizer_id)
-            .single();
-
-          if (profile?.notify_on_signup) {
+        // Notify the organizer too, but only if they've opted in for this
+        // specific event, since a popular event could otherwise mean
+        // hundreds of emails to the organizer for something they can
+        // just check on their dashboard.
+        if (event.notify_on_signup) {
+          try {
             const { data: organizerData } = await supabaseAdmin.auth.admin.getUserById(event.organizer_id);
             const organizerEmail = organizerData?.user?.email;
 
@@ -141,18 +168,21 @@ export async function POST(request) {
                 subject: `New signup: ${event.name}`,
                 html: `
                   <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
-                    <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">New signup</p>
+                    <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f; margin: 0 0 8px;">New signup</p>
                     <h1 style="font-size: 20px; margin: 0 0 8px;">${event.name}</h1>
                     <p style="font-size: 14px; margin: 0 0 4px;"><strong>${name}</strong></p>
                     <p style="font-size: 14px; color: #5b574c; margin: 0 0 16px;">${attendeeEmail}${phone ? ` &middot; ${phone}` : ''}</p>
                     <p style="font-size: 13px; color: #5b574c;">They've saved a card for the ${depositDisplay} hold. Nothing's charged unless they don't check in.</p>
+                    <p style="font-size: 11px; color: #c4bfae; margin-top: 24px; border-top: 1px solid #eee; padding-top: 12px;">
+                      Sent via RSVproof
+                    </p>
                   </div>
                 `,
               });
             }
+          } catch (organizerEmailError) {
+            console.error('Organizer notification email failed to send:', organizerEmailError);
           }
-        } catch (organizerEmailError) {
-          console.error('Organizer notification email failed to send:', organizerEmailError);
         }
       }
     } catch (emailError) {

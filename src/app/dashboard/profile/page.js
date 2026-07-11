@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
-const PRESET_COLORS = ['#d99a1b', '#b04632', '#1f2a33', '#2f6b4f', '#5a4fcf'];
-
 export default function ProfilePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -16,12 +14,12 @@ export default function ProfilePage() {
   const [currentEmail, setCurrentEmail] = useState('');
   const [email, setEmail] = useState('');
   const [emailChangePending, setEmailChangePending] = useState(false);
+  const [userId, setUserId] = useState('');
 
   const [businessName, setBusinessName] = useState('');
   const [profilePictureUrl, setProfilePictureUrl] = useState('');
-  const [brandColor, setBrandColor] = useState('');
-  const [logoUrl, setLogoUrl] = useState('');
-  const [notifyOnSignup, setNotifyOnSignup] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
     load();
@@ -35,6 +33,7 @@ export default function ProfilePage() {
       return;
     }
 
+    setUserId(user.id);
     setCurrentEmail(user.email || '');
     setEmail(user.email || '');
 
@@ -47,11 +46,53 @@ export default function ProfilePage() {
     if (data) {
       setBusinessName(data.business_name || '');
       setProfilePictureUrl(data.profile_picture_url || '');
-      setBrandColor(data.brand_color || '');
-      setLogoUrl(data.logo_url || '');
-      setNotifyOnSignup(data.notify_on_signup || false);
     }
     setLoading(false);
+  }
+
+  async function handlePictureUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Please choose an image file.');
+      return;
+    }
+    // Generous but not unlimited, avoids someone accidentally uploading a
+    // multi-hundred-MB photo straight from a phone camera.
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Image must be under 5MB.');
+      return;
+    }
+
+    setUploadError('');
+    setUploadingPicture(true);
+
+    // Fixed filename per user (no extension needed, Supabase serves the
+    // correct content-type from what's stored), so re-uploading a new
+    // photo replaces the old one instead of accumulating orphaned files
+    // in the bucket.
+    const path = `${userId}/avatar`;
+
+    const { error: uploadErr } = await supabase.storage
+      .from('avatars')
+      .upload(path, file, { upsert: true, contentType: file.type });
+
+    if (uploadErr) {
+      setUploadError(uploadErr.message);
+      setUploadingPicture(false);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('avatars')
+      .getPublicUrl(path);
+
+    // Cache-busting query param, otherwise the browser (and some CDNs)
+    // keep showing the old cached image at that same URL after a
+    // re-upload, since the path itself didn't change.
+    setProfilePictureUrl(`${publicUrlData.publicUrl}?t=${Date.now()}`);
+    setUploadingPicture(false);
   }
 
   async function handleSave(e) {
@@ -63,16 +104,21 @@ export default function ProfilePage() {
 
     const { data: { user } } = await supabase.auth.getUser();
 
+    // upsert, not update: if this organizer has never saved a profile
+    // before, there's no existing row for .update() to match, and it
+    // would silently affect zero rows with no error, exactly the "looks
+    // saved, reverts on refresh" bug this replaces. upsert creates the
+    // row on first save and updates it on every save after that.
     const { error: profileError } = await supabase
       .from('organizer_profiles')
-      .update({
-        business_name: businessName,
-        profile_picture_url: profilePictureUrl || null,
-        brand_color: brandColor || null,
-        logo_url: logoUrl || null,
-        notify_on_signup: notifyOnSignup,
-      })
-      .eq('id', user.id);
+      .upsert(
+        {
+          id: user.id,
+          business_name: businessName,
+          profile_picture_url: profilePictureUrl || null,
+        },
+        { onConflict: 'id' }
+      );
 
     if (profileError) {
       setError(profileError.message);
@@ -135,103 +181,47 @@ export default function ProfilePage() {
             )}
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Profile picture URL</label>
-            <input
-              type="url"
-              placeholder="https://..."
-              value={profilePictureUrl}
-              onChange={(e) => setProfilePictureUrl(e.target.value)}
-              className="field w-full px-3 py-2"
-            />
-            <p className="text-xs text-ink-soft mt-1">
-              Optional, just for your own account view. Paste a link to an image
-              you already have hosted somewhere.
-            </p>
-            {profilePictureUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profilePictureUrl}
-                alt="Profile preview"
-                className="mt-2 h-12 w-12 rounded-full object-cover border border-line"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-4 pt-6 border-t border-line">
-          <h2 className="font-medium">Branding</h2>
-          <p className="text-xs text-ink-soft -mt-2">
-            Shown on every event page your attendees see.
-          </p>
-          <div>
-            <label className="block text-sm font-medium mb-1">Logo URL</label>
-            <input
-              type="url"
-              placeholder="https://..."
-              value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
-              className="field w-full px-3 py-2"
-            />
-            {logoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={logoUrl}
-                alt="Logo preview"
-                className="mt-2 h-12 w-12 rounded-full object-cover border border-line"
-                onError={(e) => { e.target.style.display = 'none'; }}
-              />
-            )}
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Brand color</label>
-            <div className="flex items-center gap-2 mb-2">
-              {PRESET_COLORS.map((color) => (
-                <button
-                  type="button"
-                  key={color}
-                  onClick={() => setBrandColor(color)}
-                  className="w-8 h-8 rounded-full border-2"
-                  style={{
-                    background: color,
-                    borderColor: brandColor === color ? 'var(--ink)' : 'transparent',
-                  }}
-                  aria-label={`Use ${color}`}
+            <label className="block text-sm font-medium mb-1">Profile picture</label>
+            <div className="flex items-center gap-3">
+              {profilePictureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profilePictureUrl}
+                  alt="Profile preview"
+                  className="h-14 w-14 rounded-full object-cover border border-line shrink-0"
+                  onError={(e) => { e.target.style.display = 'none'; }}
                 />
-              ))}
-              <input
-                type="text"
-                placeholder="#d99a1b"
-                value={brandColor}
-                onChange={(e) => setBrandColor(e.target.value)}
-                className="field px-3 py-1.5 text-sm font-mono w-28"
-              />
+              ) : (
+                <div className="h-14 w-14 rounded-full bg-paper-dim border border-line shrink-0" />
+              )}
+              <div>
+                <label
+                  htmlFor="profile-picture-upload"
+                  className="inline-block text-sm px-4 py-2 rounded-lg border border-line text-ink cursor-pointer hover:border-ink transition-colors"
+                >
+                  {uploadingPicture
+                    ? 'Uploading...'
+                    : profilePictureUrl
+                    ? 'Change photo'
+                    : 'Upload photo'}
+                </label>
+                <input
+                  id="profile-picture-upload"
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePictureUpload}
+                  disabled={uploadingPicture}
+                  className="hidden"
+                />
+              </div>
             </div>
-            <p className="text-xs text-ink-soft">
-              Used for the deposit button and confirmation on your event pages.
-              Leave blank to use the default marigold.
+            {uploadError && (
+              <p className="text-clay text-xs mt-1.5">{uploadError}</p>
+            )}
+            <p className="text-xs text-ink-soft mt-1.5">
+              Optional, just for your own account view. JPG or PNG, up to 5MB.
             </p>
           </div>
-        </div>
-
-        <div className="flex items-start justify-between gap-4 pt-6 border-t border-line">
-          <div>
-            <label className="block text-sm font-medium mb-1">Email me on every signup</label>
-            <p className="text-xs text-ink-soft">
-              Off by default. For a popular event this can mean a lot of email,
-              turn it on only if you want a heads-up per signup instead of
-              checking your dashboard.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setNotifyOnSignup((v) => !v)}
-            className={`shrink-0 text-sm px-3 py-1 rounded-full font-medium ${
-              notifyOnSignup ? 'bg-marigold text-ink' : 'bg-paper-dim text-ink-soft'
-            }`}
-          >
-            {notifyOnSignup ? 'On' : 'Off'}
-          </button>
         </div>
 
         <div className="pt-6 border-t border-line">

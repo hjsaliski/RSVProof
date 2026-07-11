@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { resend } from '@/lib/resend';
 import { cancelAttendeeDeposit } from '@/lib/cancelDeposit';
+import { getOrganizerBusinessName } from '@/lib/getOrganizerBusinessName';
 
 // Cancels an entire event: every attendee gets their deposit released and
 // marked cancelled, reusing the exact same per-attendee logic as
@@ -32,6 +33,8 @@ export async function cancelEventAndAttendees(eventId) {
     .eq('event_id', eventId)
     .neq('charge_status', 'cancelled');
 
+  const businessName = await getOrganizerBusinessName(event.organizer_id);
+
   let notified = 0;
 
   for (const attendee of attendees || []) {
@@ -50,8 +53,9 @@ export async function cancelEventAndAttendees(eventId) {
           subject: `Event cancelled: ${event.name}`,
           html: `
             <div style="font-family: sans-serif; max-width: 420px; margin: 0 auto;">
-              <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f;">Cancelled</p>
+              <p style="text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; color: #a9740f; margin: 0 0 8px;">Cancelled</p>
               <h1 style="font-size: 22px; margin: 0 0 4px;">${event.name}</h1>
+              ${businessName ? `<p style="font-size: 13px; color: #a39d8c; margin: 0 0 12px;">Hosted by ${businessName}</p>` : ''}
               <p style="color: #5b574c;">
                 The organizer has cancelled this event. Your deposit has been
                 cancelled and your card will not be charged.
