@@ -99,6 +99,28 @@ export async function POST(request) {
       })
       .eq('id', event.id);
 
+    // Keep event_date and checkin_cutoff in sync with Eventbrite any time
+    // the event is edited, since organizers can change the date/time after
+    // RSVproof already auto-created the event from event.published.
+    // Skipped when cancelled, no point syncing dates on an event that's
+    // being cancelled out from under attendees anyway. Runs for postponed
+    // events too, since a postponement is usually exactly when the date
+    // changes, that's the whole point of the notification below.
+    if (!isCancelled && (ebEvent.start?.utc || ebEvent.end?.utc)) {
+      const dateUpdate = {};
+      if (ebEvent.start?.utc) dateUpdate.event_date = ebEvent.start.utc;
+      if (ebEvent.end?.utc) dateUpdate.checkin_cutoff = ebEvent.end.utc;
+
+      const { error: dateSyncError } = await supabaseAdmin
+        .from('events')
+        .update(dateUpdate)
+        .eq('id', event.id);
+
+      if (dateSyncError) {
+        console.error('Syncing event date/cutoff from Eventbrite failed:', dateSyncError);
+      }
+    }
+
     if (isCancelled) {
       try {
         await cancelEventAndAttendees(event.id);
