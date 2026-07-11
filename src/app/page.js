@@ -5,7 +5,7 @@ export default function Home() {
       <section className="bg-dusk text-paper">
         <div className="max-w-5xl mx-auto px-6 py-20 grid md:grid-cols-2 gap-12 items-center">
           <div>
-            <p className="eyebrow mb-4" style={{ color: "#e8c374" }}>
+            <p className="eyebrow mb-4" style={{ color: "#e8c374", fontSize: "0.9rem" }}>
               For pop-ups &amp; free events
             </p>
             <h1 className="font-display text-4xl md:text-5xl leading-tight mb-5">
@@ -59,7 +59,7 @@ export default function Home() {
           true and wasn't visible anywhere before this section. */}
       <section className="bg-paper-dim">
         <div className="max-w-5xl mx-auto px-6 py-16">
-          <p className="eyebrow mb-2 text-center">Two ways to start</p>
+          <p className="eyebrow mb-2 text-center" style={{ fontSize: "0.9rem" }}>Two ways to start</p>
           <h2 className="font-display text-2xl md:text-3xl mb-10 text-center max-w-2xl mx-auto">
             Already posting your event somewhere else? Connect it instead of starting over.
           </h2>

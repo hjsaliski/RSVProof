@@ -13,6 +13,9 @@ export default function EventDetailPage() {
   const [saving, setSaving] = useState(false);
   const [savingNotify, setSavingNotify] = useState(false);
   const [copiedLink, setCopiedLink] = useState('');
+  const [attendeeSearch, setAttendeeSearch] = useState('');
+  const [attendeeStatusFilter, setAttendeeStatusFilter] = useState('all');
+  const [attendeePage, setAttendeePage] = useState(1);
   const [depositInput, setDepositInput] = useState('');
   const [savingDeposit, setSavingDeposit] = useState(false);
   const [depositSaved, setDepositSaved] = useState(false);
@@ -364,6 +367,43 @@ export default function EventDetailPage() {
   const depositAmount = event.deposit_amount_cents / 100;
   const revenueProtected = chargedCount * depositAmount;
 
+  // Filtering and pagination for the attendee list, this stays a plain
+  // computation (not useMemo) since it sits after this component's early
+  // returns for loading/not-found, and hooks can't be called after a
+  // conditional return without breaking React's rules of hooks.
+  const ATTENDEES_PER_PAGE = 25;
+  const searchLower = attendeeSearch.trim().toLowerCase();
+  const filteredAttendees = attendees.filter((a) => {
+    const matchesSearch =
+      !searchLower ||
+      a.name?.toLowerCase().includes(searchLower) ||
+      a.email?.toLowerCase().includes(searchLower) ||
+      a.phone?.toLowerCase().includes(searchLower);
+
+    if (!matchesSearch) return false;
+
+    switch (attendeeStatusFilter) {
+      case 'checked_in':
+        return !!a.checked_in_at;
+      case 'not_checked_in':
+        return !a.checked_in_at && a.charge_status !== 'cancelled';
+      case 'invited':
+        return a.charge_status === 'invited';
+      case 'charge_failed':
+        return a.charge_status === 'charge_failed';
+      case 'cancelled':
+        return a.charge_status === 'cancelled';
+      default:
+        return true;
+    }
+  });
+  const totalAttendeePages = Math.max(1, Math.ceil(filteredAttendees.length / ATTENDEES_PER_PAGE));
+  const clampedAttendeePage = Math.min(attendeePage, totalAttendeePages);
+  const paginatedAttendees = filteredAttendees.slice(
+    (clampedAttendeePage - 1) * ATTENDEES_PER_PAGE,
+    clampedAttendeePage * ATTENDEES_PER_PAGE
+  );
+
   return (
     <main className="flex-1 max-w-5xl mx-auto w-full px-6 py-10">
       <a href="/dashboard" className="text-sm underline text-ink-soft">&larr; Back to events</a>
@@ -527,132 +567,6 @@ export default function EventDetailPage() {
             </p>
           </div>
 
-          <div className="panel p-5 space-y-3">
-            <h2 className="font-medium">Eventbrite</h2>
-            {event.eventbrite_event_id ? (
-              <p className="text-sm text-marigold-dark">
-                Linked. New RSVPs on Eventbrite will automatically get invited to
-                secure a deposit here.
-              </p>
-            ) : !eventbriteConnected ? (
-              <p className="text-sm text-ink-soft">
-                Connect your Eventbrite account first, from{' '}
-                <a href="/dashboard/connect" className="underline">Connect a platform</a>,
-                then come back here to link this specific event.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm text-ink-soft">
-                  Link this event to one of your Eventbrite events, so new RSVPs
-                  there automatically get invited to secure a deposit here.
-                </p>
-                {eventbriteEvents.length === 0 ? (
-                  <button
-                    onClick={loadEventbriteEvents}
-                    disabled={loadingEbEvents}
-                    className="text-sm px-4 py-2 rounded-lg border border-line text-ink-soft disabled:opacity-50"
-                  >
-                    {loadingEbEvents ? 'Loading...' : 'Load my Eventbrite events'}
-                  </button>
-                ) : (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={linkingId}
-                      onChange={(e) => setLinkingId(e.target.value)}
-                      className="field px-3 py-2 text-sm"
-                    >
-                      <option value="">Select an Eventbrite event</option>
-                      {eventbriteEvents.map((e) => (
-                        <option key={e.id} value={e.id}>{e.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      onClick={linkEventbrite}
-                      disabled={!linkingId || linking}
-                      className="btn-marigold text-sm px-4 py-2 disabled:opacity-50"
-                    >
-                      {linking ? 'Linking...' : 'Link'}
-                    </button>
-                  </div>
-                )}
-                {linkError && <p className="text-clay text-sm">{linkError}</p>}
-              </div>
-            )}
-          </div>
-
-          <div className="panel p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-medium">Manage this event</h2>
-              <a href="/dashboard/guide#reminders" className="text-xs underline text-ink-soft">
-                Full guide &rarr;
-              </a>
-            </div>
-
-            <div className="pb-5 mb-5 border-b border-line">
-              <h3 className="text-sm font-semibold mb-1">Reminders <span className="text-ink-soft font-normal">(automatic)</span></h3>
-              <p className="text-sm text-ink-soft mb-3">
-                Sends immediately instead of waiting for today&apos;s scheduled run.
-              </p>
-              <button
-                onClick={sendReminders}
-                disabled={sendingReminders}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: 'var(--marigold-dark)' }}
-              >
-                {sendingReminders ? 'Sending...' : 'Send reminders now'}
-              </button>
-              {reminderResult && (
-                <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-                  {JSON.stringify(reminderResult, null, 2)}
-                </pre>
-              )}
-            </div>
-
-            <div className="pb-5 mb-5 border-b border-line">
-              <h3 className="text-sm font-semibold mb-1">Invited, not yet secured <span className="text-ink-soft font-normal">(manual only)</span></h3>
-              <p className="text-sm text-ink-soft mb-3">
-                RSVP&apos;d on a connected platform, but hasn&apos;t secured a deposit yet.
-              </p>
-              <p className="font-display text-2xl mb-3">{invitedCount}</p>
-              <button
-                onClick={remindAllInvited}
-                disabled={remindingInvited || invitedCount === 0}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: 'var(--marigold-dark)' }}
-              >
-                {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
-              </button>
-              {remindInvitedResult && (
-                <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-                  {JSON.stringify(remindInvitedResult, null, 2)}
-                </pre>
-              )}
-            </div>
-
-            <div>
-              <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
-              <p className="text-sm text-ink-soft mb-3">
-                Runs immediately instead of waiting for today&apos;s scheduled run.
-              </p>
-              <button
-                onClick={runNoShowCharges}
-                disabled={charging || event.status === 'charges_processed'}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: 'var(--clay)' }}
-              >
-                {event.status === 'charges_processed'
-                  ? 'Already processed'
-                  : charging
-                  ? 'Processing...'
-                  : 'Run no-show charges'}
-              </button>
-              {chargeResult && (
-                <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-                  {JSON.stringify(chargeResult, null, 2)}
-                </pre>
-              )}
-            </div>
-          </div>
 
           {event.eventbrite_event_id && (
             <div className="panel p-5">
@@ -677,12 +591,55 @@ export default function EventDetailPage() {
           )}
 
           <div className="panel p-5">
-            <h2 className="font-medium mb-3">Attendees</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-medium">Attendees</h2>
+              {attendees.length > 0 && (
+                <span className="text-xs text-ink-soft">
+                  {filteredAttendees.length} of {attendees.length}
+                </span>
+              )}
+            </div>
+
             {attendees.length === 0 && (
               <p className="text-sm text-ink-soft">No signups yet.</p>
             )}
+
+            {attendees.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                <input
+                  type="text"
+                  placeholder="Search name, email, or phone"
+                  value={attendeeSearch}
+                  onChange={(e) => {
+                    setAttendeeSearch(e.target.value);
+                    setAttendeePage(1);
+                  }}
+                  className="field px-3 py-2 text-sm flex-1 min-w-[180px]"
+                />
+                <select
+                  value={attendeeStatusFilter}
+                  onChange={(e) => {
+                    setAttendeeStatusFilter(e.target.value);
+                    setAttendeePage(1);
+                  }}
+                  className="field px-3 py-2 text-sm"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="checked_in">Checked in</option>
+                  <option value="not_checked_in">Not checked in</option>
+                  <option value="invited">Invited, not secured</option>
+                  <option value="charge_failed">Charge failed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            )}
+
+            {attendees.length > 0 && filteredAttendees.length === 0 && (
+              <p className="text-sm text-ink-soft">No attendees match this search or filter.</p>
+            )}
+
             <ul className="divide-y divide-line">
-              {attendees.map((a) => (
+              {paginatedAttendees.map((a) => (
                 <li key={a.id} className="py-3 flex justify-between items-center">
                   <div>
                     <p className="text-sm font-medium">{a.name}</p>
@@ -721,64 +678,32 @@ export default function EventDetailPage() {
                 </li>
               ))}
             </ul>
+
+            {filteredAttendees.length > ATTENDEES_PER_PAGE && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setAttendeePage((p) => Math.max(1, p - 1))}
+                  disabled={clampedAttendeePage === 1}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft disabled:opacity-40 hover:border-ink hover:text-ink transition-colors"
+                >
+                  &larr; Prev
+                </button>
+                <span className="text-xs text-ink-soft">
+                  Page {clampedAttendeePage} of {totalAttendeePages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setAttendeePage((p) => Math.min(totalAttendeePages, p + 1))}
+                  disabled={clampedAttendeePage === totalAttendeePages}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft disabled:opacity-40 hover:border-ink hover:text-ink transition-colors"
+                >
+                  Next &rarr;
+                </button>
+              </div>
+            )}
           </div>
 
-          <div className="panel p-5" style={{ borderColor: 'var(--clay)', borderWidth: '1.5px' }}>
-            <h2 className="font-semibold mb-4" style={{ color: 'var(--clay)' }}>Danger zone</h2>
-
-            <div className="pb-5 mb-5 border-b" style={{ borderColor: 'var(--clay)' }}>
-              <h3 className="text-sm font-semibold mb-1">Cancel this event</h3>
-              <p className="text-sm text-ink-soft mb-3">
-                Releases every attendee&apos;s deposit hold and emails them that the
-                event was cancelled. The event and its history stay on your
-                dashboard, just marked cancelled.
-              </p>
-              {event.eventbrite_event_id && (
-                <p className="text-sm text-ink-soft mb-3 border-l-2 pl-3" style={{ borderColor: 'var(--clay)' }}>
-                  This event is linked to Eventbrite. Cancelling here only cancels
-                  the deposit side, it does not cancel the event or tickets on
-                  Eventbrite. If you also cancel or delete this event on
-                  Eventbrite, you&apos;ll need to cancel it here separately too,
-                  since syncing between the two isn&apos;t fully reliable yet.
-                </p>
-              )}
-              <button
-                onClick={cancelEvent}
-                disabled={cancellingEvent || event.status === 'cancelled'}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
-                style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
-              >
-                {event.status === 'cancelled'
-                  ? 'Already cancelled'
-                  : cancellingEvent
-                  ? 'Cancelling...'
-                  : 'Cancel event'}
-              </button>
-              {cancelEventResult && (
-                <p className="text-sm text-marigold-dark mt-3">
-                  Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <h3 className="text-sm font-semibold mb-1">Delete this event</h3>
-              <p className="text-sm text-ink-soft mb-3">
-                Permanently removes this event and every attendee signup attached to
-                it, including their saved card references. This cannot be undone,
-                and unlike cancelling, no one is notified. Only use this for an
-                event that never really happened, like a test, not a real event
-                you&apos;re calling off, use Cancel above for that.
-              </p>
-              <button
-                onClick={deleteEvent}
-                className="px-5 py-2.5 rounded-lg text-sm font-semibold border"
-                style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
-              >
-                Delete event
-              </button>
-            </div>
-          </div>
         </div>
 
         <aside className="lg:col-span-1">
@@ -819,6 +744,134 @@ export default function EventDetailPage() {
                 Eventbrite and get invited from there automatically.
               </p>
             )}
+            <div className="panel p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-medium">Manage this event</h2>
+                <a href="/dashboard/guide#reminders" className="text-xs underline text-ink-soft">
+                  Full guide &rarr;
+                </a>
+              </div>
+
+              <div className="pb-5 mb-5 border-b border-line">
+                <h3 className="text-sm font-semibold mb-1">Reminders <span className="text-ink-soft font-normal">(automatic)</span></h3>
+                <p className="text-sm text-ink-soft mb-3">
+                  Sends immediately instead of waiting for today&apos;s scheduled run.
+                </p>
+                <button
+                  onClick={sendReminders}
+                  disabled={sendingReminders}
+                  className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'var(--marigold-dark)' }}
+                >
+                  {sendingReminders ? 'Sending...' : 'Send reminders now'}
+                </button>
+                {reminderResult && (
+                  <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+                    {JSON.stringify(reminderResult, null, 2)}
+                  </pre>
+                )}
+              </div>
+
+              <div className="pb-5 mb-5 border-b border-line">
+                <h3 className="text-sm font-semibold mb-1">Invited, not yet secured <span className="text-ink-soft font-normal">(manual only)</span></h3>
+                <p className="text-sm text-ink-soft mb-3">
+                  RSVP&apos;d on a connected platform, but hasn&apos;t secured a deposit yet.
+                </p>
+                <p className="font-display text-2xl mb-3">{invitedCount}</p>
+                <button
+                  onClick={remindAllInvited}
+                  disabled={remindingInvited || invitedCount === 0}
+                  className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'var(--marigold-dark)' }}
+                >
+                  {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
+                </button>
+                {remindInvitedResult && (
+                  <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+                    {JSON.stringify(remindInvitedResult, null, 2)}
+                  </pre>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
+                <p className="text-sm text-ink-soft mb-3">
+                  Runs immediately instead of waiting for today&apos;s scheduled run.
+                </p>
+                <button
+                  onClick={runNoShowCharges}
+                  disabled={charging || event.status === 'charges_processed'}
+                  className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                  style={{ background: 'var(--clay)' }}
+                >
+                  {event.status === 'charges_processed'
+                    ? 'Already processed'
+                    : charging
+                    ? 'Processing...'
+                    : 'Run no-show charges'}
+                </button>
+                {chargeResult && (
+                  <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
+                    {JSON.stringify(chargeResult, null, 2)}
+                  </pre>
+                )}
+              </div>
+            </div>
+            <div className="panel p-5" style={{ borderColor: 'var(--clay)', borderWidth: '1.5px' }}>
+
+              <div className="pb-5 mb-5 border-b" style={{ borderColor: 'var(--clay)' }}>
+                <h3 className="text-sm font-semibold mb-1">Cancel this event</h3>
+                <p className="text-sm text-ink-soft mb-3">
+                  Releases every attendee&apos;s deposit hold and emails them that the
+                  event was cancelled. The event and its history stay on your
+                  dashboard, just marked cancelled.
+                </p>
+                {event.eventbrite_event_id && (
+                  <p className="text-sm text-ink-soft mb-3 border-l-2 pl-3" style={{ borderColor: 'var(--clay)' }}>
+                    This event is linked to Eventbrite. Cancelling here only cancels
+                    the deposit side, it does not cancel the event or tickets on
+                    Eventbrite. If you also cancel or delete this event on
+                    Eventbrite, you&apos;ll need to cancel it here separately too,
+                    since syncing between the two isn&apos;t fully reliable yet.
+                  </p>
+                )}
+                <button
+                  onClick={cancelEvent}
+                  disabled={cancellingEvent || event.status === 'cancelled'}
+                  className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-50"
+                  style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
+                >
+                  {event.status === 'cancelled'
+                    ? 'Already cancelled'
+                    : cancellingEvent
+                    ? 'Cancelling...'
+                    : 'Cancel event'}
+                </button>
+                {cancelEventResult && (
+                  <p className="text-sm text-marigold-dark mt-3">
+                    Cancelled. {cancelEventResult.notified} of {cancelEventResult.totalAttendees} attendees notified by email.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Delete this event</h3>
+                <p className="text-sm text-ink-soft mb-3">
+                  Permanently removes this event and every attendee signup attached to
+                  it, including their saved card references. This cannot be undone,
+                  and unlike cancelling, no one is notified. Only use this for an
+                  event that never really happened, like a test, not a real event
+                  you&apos;re calling off, use Cancel above for that.
+                </p>
+                <button
+                  onClick={deleteEvent}
+                  className="px-5 py-2.5 rounded-lg text-sm font-semibold border"
+                  style={{ borderColor: 'var(--clay)', color: 'var(--clay)' }}
+                >
+                  Delete event
+                </button>
+              </div>
+            </div>
           </div>
         </aside>
       </div>
