@@ -1,11 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function ProfilePage() {
+  return (
+    <Suspense
+      fallback={<main className="flex-1 px-6 py-10 text-ink-soft">Loading...</main>}
+    >
+      <ProfilePageInner />
+    </Suspense>
+  );
+}
+
+function ProfilePageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -21,10 +32,33 @@ export default function ProfilePage() {
   const [uploadingPicture, setUploadingPicture] = useState(false);
   const [uploadError, setUploadError] = useState('');
 
+  const [stripeAccountId, setStripeAccountId] = useState('');
+  const [stripeChargesEnabled, setStripeChargesEnabled] = useState(false);
+  const [connectingStripe, setConnectingStripe] = useState(false);
+  const [syncingStripe, setSyncingStripe] = useState(false);
+  const [stripeError, setStripeError] = useState('');
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Handles the two ways Stripe sends the organizer's browser back here
+  // after visiting the hosted onboarding flow: "complete" means they
+  // finished (though that doesn't guarantee charges are enabled yet,
+  // Stripe may still be verifying something, hence re-checking rather
+  // than assuming success), "refresh" means their onboarding link expired
+  // before they finished, so a fresh one needs to be generated right away.
+  useEffect(() => {
+    const status = searchParams.get('stripe_onboarding');
+    if (status === 'complete') {
+      syncStripeStatus();
+      router.replace('/dashboard/profile');
+    } else if (status === 'refresh') {
+      startStripeConnect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -46,8 +80,61 @@ export default function ProfilePage() {
     if (data) {
       setBusinessName(data.business_name || '');
       setProfilePictureUrl(data.profile_picture_url || '');
+      setStripeAccountId(data.stripe_account_id || '');
+      setStripeChargesEnabled(data.stripe_charges_enabled || false);
     }
     setLoading(false);
+  }
+
+  async function startStripeConnect() {
+    setConnectingStripe(true);
+    setStripeError('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/stripe/connect', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const json = await res.json();
+
+      if (json.error) {
+        setStripeError(json.error);
+        setConnectingStripe(false);
+        return;
+      }
+
+      // Full page navigation to Stripe's own hosted onboarding, not a
+      // fetch, this leaves the app entirely until Stripe redirects back.
+      window.location.href = json.url;
+    } catch (err) {
+      setStripeError(`Request failed: ${err.message}`);
+      setConnectingStripe(false);
+    }
+  }
+
+  async function syncStripeStatus() {
+    setSyncingStripe(true);
+    setStripeError('');
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/stripe/connect/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const json = await res.json();
+
+      if (json.error) {
+        setStripeError(json.error);
+      } else {
+        setStripeChargesEnabled(json.chargesEnabled);
+      }
+    } catch (err) {
+      setStripeError(`Request failed: ${err.message}`);
+    }
+
+    setSyncingStripe(false);
   }
 
   async function handlePictureUpload(e) {
@@ -225,12 +312,82 @@ export default function ProfilePage() {
         </div>
 
         <div className="pt-6 border-t border-line">
-          <h2 className="font-medium mb-2">Payment methods</h2>
-          <p className="text-sm text-ink-soft">
-            Coming in Phase 3. Once organizer payouts move to automatic transfers,
-            you&apos;ll manage your payout account here instead of receiving
-            deposits manually.
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-medium">Payments</h2>
+            {stripeAccountId && (
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+                style={{
+                  background: stripeChargesEnabled ? '#dcfce7' : '#f3f4f6',
+                  color: stripeChargesEnabled ? '#16a34a' : 'var(--ink-soft)',
+                }}
+              >
+                <span
+                  className="inline-block w-1.5 h-1.5 rounded-full"
+                  style={{ background: stripeChargesEnabled ? '#22c55e' : '#9ca3af' }}
+                />
+                {stripeChargesEnabled ? 'Connected' : 'Setup incomplete'}
+              </span>
+            )}
+          </div>
+
+          {!stripeAccountId && (
+            <>
+              <p className="text-sm text-ink-soft mb-3">
+                Connect a Stripe account and no-show charges get paid out to
+                you directly and automatically, no more manual payouts.
+                This is optional, you can keep using RSVproof without it,
+                deposits just get collected on your behalf instead until
+                you connect.
+              </p>
+              <button
+                type="button"
+                onClick={startStripeConnect}
+                disabled={connectingStripe}
+                className="text-sm px-4 py-2 rounded-lg border border-line text-ink hover:border-ink disabled:opacity-50"
+              >
+                {connectingStripe ? 'Redirecting...' : 'Connect with Stripe'}
+              </button>
+            </>
+          )}
+
+          {stripeAccountId && !stripeChargesEnabled && (
+            <>
+              <p className="text-sm text-ink-soft mb-3">
+                You started connecting a Stripe account, but setup isn&apos;t
+                finished yet, Stripe may still need a few more details from
+                you before charges can go through it.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={startStripeConnect}
+                  disabled={connectingStripe}
+                  className="text-sm px-4 py-2 rounded-lg border border-line text-ink hover:border-ink disabled:opacity-50"
+                >
+                  {connectingStripe ? 'Redirecting...' : 'Finish setup'}
+                </button>
+                <button
+                  type="button"
+                  onClick={syncStripeStatus}
+                  disabled={syncingStripe}
+                  className="text-sm px-4 py-2 rounded-lg text-ink-soft underline disabled:opacity-50"
+                >
+                  {syncingStripe ? 'Checking...' : 'Check status'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {stripeAccountId && stripeChargesEnabled && (
+            <p className="text-sm text-ink-soft">
+              Deposits and no-show charges on connected events go straight
+              to your own Stripe account, and payouts happen automatically
+              on Stripe&apos;s side.
+            </p>
+          )}
+
+          {stripeError && <p className="text-clay text-sm mt-2">{stripeError}</p>}
         </div>
 
         {error && <p className="text-clay text-sm">{error}</p>}

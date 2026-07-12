@@ -53,10 +53,38 @@ export default function Home() {
         </div>
       </section>
 
+      {/* How it works: two lanes, organizer and attendee, since they read
+          this page for different reasons. Placed right after the hero so a
+          first-time visitor understands what the product actually does
+          before being asked to decide how to start using it. */}
+      <section className="max-w-5xl mx-auto px-6 py-16 grid md:grid-cols-2 gap-10">
+        <div>
+          <p className="eyebrow mb-2">For organizers</p>
+          <h2 className="font-display text-2xl mb-4">Plan for who actually shows.</h2>
+          <ul className="space-y-3 text-ink-soft">
+            <li>Set a deposit and a check-in cutoff for any free event.</li>
+            <li>Share one link wherever you already promote.</li>
+            <li>Scan guests in at the door with your phone.</li>
+            <li>No-shows are charged automatically after the cutoff.</li>
+          </ul>
+        </div>
+        <div>
+          <p className="eyebrow mb-2">For attendees</p>
+          <h2 className="font-display text-2xl mb-4">Nothing charged if you show up.</h2>
+          <ul className="space-y-3 text-ink-soft">
+            <li>Reserve your spot with a card, nothing is charged yet.</li>
+            <li>Get a ticket with a QR code, ready when you arrive.</li>
+            <li>Scanned in, your hold is released the same day.</li>
+            <li>Miss it without notice, the hold covers your no-show.</li>
+          </ul>
+        </div>
+      </section>
+
       {/* Two paths in: connect something already in use, or start fresh.
-          This exists specifically so the page doesn't read as "you must
-          build your event listing from scratch here," since that's not
-          true and wasn't visible anywhere before this section. */}
+          Now positioned as the closing call-to-action, once the visitor
+          already understands the pitch from the section above, rather
+          than asking them to pick a path before they know what either
+          path actually leads to. */}
       <section className="bg-paper-dim">
         <div className="max-w-5xl mx-auto px-6 py-16">
           <p className="eyebrow mb-2 text-center" style={{ fontSize: "0.9rem" }}>Two ways to start</p>
@@ -91,31 +119,6 @@ export default function Home() {
               </a>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* How it works: two lanes, organizer and attendee, since they read
-          this page for different reasons */}
-      <section className="max-w-5xl mx-auto px-6 py-16 grid md:grid-cols-2 gap-10">
-        <div>
-          <p className="eyebrow mb-2">For organizers</p>
-          <h2 className="font-display text-2xl mb-4">Plan for who actually shows.</h2>
-          <ul className="space-y-3 text-ink-soft">
-            <li>Set a deposit and a check-in cutoff for any free event.</li>
-            <li>Share one link wherever you already promote.</li>
-            <li>Scan guests in at the door with your phone.</li>
-            <li>No-shows are charged automatically after the cutoff.</li>
-          </ul>
-        </div>
-        <div>
-          <p className="eyebrow mb-2">For attendees</p>
-          <h2 className="font-display text-2xl mb-4">Nothing charged if you show up.</h2>
-          <ul className="space-y-3 text-ink-soft">
-            <li>Reserve your spot with a card, nothing is charged yet.</li>
-            <li>Get a ticket with a QR code, ready when you arrive.</li>
-            <li>Scanned in, your hold is released the same day.</li>
-            <li>Miss it without notice, the hold covers your no-show.</li>
-          </ul>
         </div>
       </section>
     </main>

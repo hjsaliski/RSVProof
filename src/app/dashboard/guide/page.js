@@ -25,7 +25,7 @@ export default function GuidePage() {
   return (
     <main className="flex-1 max-w-3xl mx-auto w-full px-6 py-10">
       <a href="/dashboard" className="text-sm underline text-ink-soft">&larr; Back to events</a>
-      <p className="eyebrow mt-4 mb-1"></p>
+      <p className="eyebrow mt-4 mb-1">Guide</p>
       <h1 className="font-display text-3xl mb-2">How to use RSVproof</h1>
       <p className="text-sm text-ink-soft mb-10">
         Everything below lives on this one page so it&apos;s easy to search or
@@ -38,6 +38,7 @@ export default function GuidePage() {
           <li><a href="#connect" className="underline text-ink-soft">2. Connecting a third-party platform</a></li>
           <li><a href="#deposits" className="underline text-ink-soft">3. Deposits and your signup links</a></li>
           <li><a href="#reminders" className="underline text-ink-soft">4. Reminders and no-show charges</a></li>
+          <li><a href="#payments" className="underline text-ink-soft">5. Getting paid</a></li>
         </ul>
       </nav>
 
@@ -181,6 +182,52 @@ export default function GuidePage() {
               cutoff passes if you don&apos;t want to wait. It only needs to be
               run once per event, either automatically or manually,
               whichever happens first.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="payments" className="mb-4 scroll-mt-6">
+        <p className="eyebrow mb-2">5</p>
+        <h2 className="font-display text-2xl mb-4">Getting paid</h2>
+        <div className="space-y-5 text-ink-soft">
+          <div>
+            <h3 className="text-ink font-semibold mb-1">Connecting Stripe (optional)</h3>
+            <p>
+              From your <a href="/dashboard/profile" className="underline">Profile</a> page,
+              you can connect a Stripe account under Payments. This is
+              optional, RSVproof works fine without it, connecting it just
+              changes how you get paid.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-ink font-semibold mb-1">If you connect Stripe</h3>
+            <p>
+              No-show charges get paid out to your own Stripe account
+              directly and automatically, Stripe handles the transfer to
+              your bank on its own schedule, the same as any other Stripe
+              account you&apos;d run yourself. RSVproof takes a small
+              percentage of each no-show charge as its fee, the rest is
+              yours.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-ink font-semibold mb-1">If you don&apos;t connect Stripe</h3>
+            <p>
+              Deposits are still collected exactly the same way, nothing
+              about running your events changes. No-show charges are held
+              on RSVproof&apos;s side instead of yours, and paid out to you
+              separately, outside the app.
+            </p>
+          </div>
+          <div>
+            <h3 className="text-ink font-semibold mb-1">Checking your status</h3>
+            <p>
+              Your Profile page shows whether you&apos;re connected. If
+              you&apos;ve started but not finished Stripe&apos;s setup, it&apos;ll say
+              so and let you pick up where you left off, Stripe sometimes
+              needs a few extra details before it&apos;ll enable charges on a
+              new account.
             </p>
           </div>
         </div>
