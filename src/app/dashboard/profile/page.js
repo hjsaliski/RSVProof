@@ -37,6 +37,8 @@ function ProfilePageInner() {
   const [connectingStripe, setConnectingStripe] = useState(false);
   const [syncingStripe, setSyncingStripe] = useState(false);
   const [stripeError, setStripeError] = useState('');
+  const [manualPayoutMethod, setManualPayoutMethod] = useState('');
+  const [manualPayoutHandle, setManualPayoutHandle] = useState('');
 
   useEffect(() => {
     load();
@@ -60,6 +62,11 @@ function ProfilePageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
   async function load() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -82,6 +89,8 @@ function ProfilePageInner() {
       setProfilePictureUrl(data.profile_picture_url || '');
       setStripeAccountId(data.stripe_account_id || '');
       setStripeChargesEnabled(data.stripe_charges_enabled || false);
+      setManualPayoutMethod(data.manual_payout_method || '');
+      setManualPayoutHandle(data.manual_payout_handle || '');
     }
     setLoading(false);
   }
@@ -203,6 +212,8 @@ function ProfilePageInner() {
           id: user.id,
           business_name: businessName,
           profile_picture_url: profilePictureUrl || null,
+          manual_payout_method: manualPayoutMethod || null,
+          manual_payout_handle: manualPayoutHandle || null,
         },
         { onConflict: 'id' }
       );
@@ -388,6 +399,34 @@ function ProfilePageInner() {
           )}
 
           {stripeError && <p className="text-clay text-sm mt-2">{stripeError}</p>}
+
+          {!stripeChargesEnabled && (
+            <div className="pt-4 mt-4 border-t border-line">
+              <p className="text-sm text-ink-soft mb-3">
+                Or, skip Stripe for now and just give us your Venmo or
+                PayPal, we&apos;ll send your share manually after each event.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <select
+                  value={manualPayoutMethod}
+                  onChange={(e) => setManualPayoutMethod(e.target.value)}
+                  className="field px-3 py-2 text-sm"
+                >
+                  <option value="">Choose a method</option>
+                  <option value="venmo">Venmo</option>
+                  <option value="paypal">PayPal</option>
+                  <option value="other">Other</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="@yourhandle"
+                  value={manualPayoutHandle}
+                  onChange={(e) => setManualPayoutHandle(e.target.value)}
+                  className="field px-3 py-2 text-sm flex-1 min-w-[160px]"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {error && <p className="text-clay text-sm">{error}</p>}
@@ -396,6 +435,14 @@ function ProfilePageInner() {
           {saving ? 'Saving...' : saved ? 'Saved' : 'Save profile'}
         </button>
       </form>
+
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="w-full mt-3 text-sm px-4 py-2.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+      >
+        Log out
+      </button>
     </main>
   );
 }

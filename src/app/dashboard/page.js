@@ -9,12 +9,12 @@ import { supabase } from '@/lib/supabaseClient';
 // version of the raw value for any future platform not listed here yet,
 // so a new integration never shows up as a blank or broken label.
 const SOURCE_LABELS = {
-  standalone: 'Standalone',
+  standalone: 'RSVproof',
   eventbrite: 'Eventbrite',
 };
 
 function sourceLabel(source) {
-  return SOURCE_LABELS[source] || (source ? source[0].toUpperCase() + source.slice(1) : 'Standalone');
+  return SOURCE_LABELS[source] || (source ? source[0].toUpperCase() + source.slice(1) : 'RSVproof');
 }
 
 export default function DashboardPage() {
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [timeFilter, setTimeFilter] = useState('all');
 
   useEffect(() => {
     async function load() {
@@ -42,11 +43,6 @@ export default function DashboardPage() {
     load();
   }, [router]);
 
-  async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push('/login');
-  }
-
   // Only show a filter pill for a platform that actually has events, so
   // this doesn't clutter the dashboard with empty categories before any
   // third-party integrations are connected.
@@ -56,9 +52,32 @@ export default function DashboardPage() {
   }, [events]);
 
   const visibleEvents = useMemo(() => {
-    if (activeFilter === 'all') return events;
-    return events.filter((e) => (e.source || 'standalone') === activeFilter);
-  }, [events, activeFilter]);
+    const now = new Date();
+    return events
+      .filter((e) => {
+        const matchesSource = activeFilter === 'all' || (e.source || 'standalone') === activeFilter;
+        const isPast = new Date(e.event_date) < now;
+        const matchesTime =
+          timeFilter === 'all' ||
+          (timeFilter === 'active' && !isPast) ||
+          (timeFilter === 'past' && isPast);
+        return matchesSource && matchesTime;
+      })
+      .map((e) => ({ ...e, isPast: new Date(e.event_date) < now }))
+      .sort((a, b) => {
+        // Upcoming events always sort before past ones, regardless of
+        // date math, so "what's coming up" stays at the top rather than
+        // getting buried under an old event that happens to sort earlier
+        // in a pure chronological order.
+        if (a.isPast !== b.isPast) return a.isPast ? 1 : -1;
+        // Within upcoming: soonest first. Within past: most recent first,
+        // so a still-relevant last-week event isn't pushed below one from
+        // months ago.
+        return a.isPast
+          ? new Date(b.event_date) - new Date(a.event_date)
+          : new Date(a.event_date) - new Date(b.event_date);
+      });
+  }, [events, activeFilter, timeFilter]);
 
   if (loading) return <main className="flex-1 px-6 py-10 text-ink-soft">Loading...</main>;
 
@@ -74,7 +93,7 @@ export default function DashboardPage() {
             href="/dashboard/guide"
             className="text-sm px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
           >
-            How-to Guide
+            How to guide
           </a>
           <a
             href="/dashboard/profile"
@@ -82,12 +101,6 @@ export default function DashboardPage() {
           >
             Profile
           </a>
-          <button
-            onClick={handleLogout}
-            className="text-sm px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
-          >
-            Log out
-          </button>
         </div>
       </div>
 
@@ -103,27 +116,51 @@ export default function DashboardPage() {
         </a>
       </div>
 
-      {events.length > 0 && availableSources.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={() => setActiveFilter('all')}
-            className={`text-sm px-3 py-1.5 rounded-full font-medium ${
-              activeFilter === 'all' ? 'bg-ink text-paper' : 'bg-paper-dim text-ink-soft'
-            }`}
-          >
-            All
-          </button>
-          {availableSources.map((source) => (
-            <button
-              key={source}
-              onClick={() => setActiveFilter(source)}
-              className={`text-sm px-3 py-1.5 rounded-full font-medium ${
-                activeFilter === source ? 'bg-ink text-paper' : 'bg-paper-dim text-ink-soft'
-              }`}
-            >
-              {sourceLabel(source)}
-            </button>
-          ))}
+      {events.length > 0 && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Show</span>
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'active', label: 'Active' },
+              { key: 'past', label: 'Past' },
+            ].map((opt) => (
+              <button
+                key={opt.key}
+                onClick={() => setTimeFilter(opt.key)}
+                className={`text-sm px-3 py-1.5 rounded-full font-medium transition-colors ${
+                  timeFilter === opt.key ? 'bg-ink text-paper' : 'bg-paper-dim text-ink-soft hover:bg-paper-dim/70'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {availableSources.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Platform</span>
+              <button
+                onClick={() => setActiveFilter('all')}
+                className={`text-sm px-3 py-1.5 rounded-full font-medium transition-colors ${
+                  activeFilter === 'all' ? 'bg-ink text-paper' : 'bg-paper-dim text-ink-soft hover:bg-paper-dim/70'
+                }`}
+              >
+                All
+              </button>
+              {availableSources.map((source) => (
+                <button
+                  key={source}
+                  onClick={() => setActiveFilter(source)}
+                  className={`text-sm px-3 py-1.5 rounded-full font-medium transition-colors ${
+                    activeFilter === source ? 'bg-ink text-paper' : 'bg-paper-dim text-ink-soft hover:bg-paper-dim/70'
+                  }`}
+                >
+                  {sourceLabel(source)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -135,7 +172,7 @@ export default function DashboardPage() {
 
       {events.length > 0 && visibleEvents.length === 0 && (
         <div className="panel p-8 text-center text-ink-soft">
-          No events from this source yet.
+          No events match the selected filters.
         </div>
       )}
 
@@ -159,19 +196,26 @@ export default function DashboardPage() {
               </div>
               <div className="text-right">
                 <p className="font-mono text-sm mb-1.5">${(event.deposit_amount_cents / 100).toFixed(2)}</p>
-                <span
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-                  style={{
-                    background: event.deposit_enabled ? '#dcfce7' : '#f3f4f6',
-                    color: event.deposit_enabled ? '#16a34a' : 'var(--ink-soft)',
-                  }}
+                <div
+                  className="flex items-center justify-end gap-1.5"
+                  style={event.isPast ? { opacity: 0.45 } : undefined}
                 >
+                  {event.deposit_enabled ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="9" />
+                    </svg>
+                  )}
                   <span
-                    className="inline-block w-1.5 h-1.5 rounded-full"
-                    style={{ background: event.deposit_enabled ? '#22c55e' : '#9ca3af' }}
-                  />
-                  {event.deposit_enabled ? 'Deposits on' : 'Deposits off'}
-                </span>
+                    className="text-xs font-medium"
+                    style={{ color: event.deposit_enabled ? '#16a34a' : 'var(--ink-soft)' }}
+                  >
+                    Deposits {event.deposit_enabled ? 'on' : 'off'}
+                  </span>
+                </div>
               </div>
             </Link>
           </li>
