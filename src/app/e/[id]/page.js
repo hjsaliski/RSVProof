@@ -7,8 +7,6 @@ import { Elements } from '@stripe/react-stripe-js';
 import QRCode from 'qrcode';
 import CardForm from './CardForm';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-
 // Darkens a hex color for hover states, since organizers only pick one
 // brand color, not a full hover shade to go with it.
 function darken(hex, amount = 0.2) {
@@ -45,6 +43,7 @@ function AttendeeSignupPageInner() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [stripePromise, setStripePromise] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,6 +88,18 @@ function AttendeeSignupPageInner() {
       return;
     }
 
+    // Stripe.js has to know which connected account a SetupIntent lives
+    // in before it can confirm it, the same account-context requirement
+    // as the server-side calls, just enforced on the browser side this
+    // time. Without this, confirming the card fails with "No such
+    // setupintent," since the platform-account context can't see an
+    // object that was actually created under a connected account.
+    setStripePromise(
+      loadStripe(
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
+        json.stripeAccountId ? { stripeAccount: json.stripeAccountId } : undefined
+      )
+    );
     setClientSecret(json.clientSecret);
     setStep('payment');
   }
@@ -251,7 +262,7 @@ function AttendeeSignupPageInner() {
                 </form>
               )}
 
-              {step === 'payment' && clientSecret && (
+              {step === 'payment' && clientSecret && stripePromise && (
                 <Elements stripe={stripePromise}>
                   <CardForm
                     clientSecret={clientSecret}

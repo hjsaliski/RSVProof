@@ -9,28 +9,51 @@ import { cancelEventAndAttendees } from '@/lib/cancelEvent';
 //    their Supabase auth token plus the specific eventId.
 // 2. A scheduled job (cron) calls this with no eventId and a shared secret
 //    header, which processes every event whose cutoff has passed.
-// Phase 1 has the organizer receiving the money manually (Venmo, etc.),
-// since there's no Stripe Connect yet, so this route charges the platform's
-// own Stripe account, not a connected organizer account.
+//
+// Phase 5: whether an attendee gets charged on the platform's own account
+// or directly on the organizer's connected account depends entirely on
+// attendee.stripe_account_id, snapshotted back at signup time in
+// complete-signup. That's a per-attendee decision, not a per-organizer
+// one made fresh here, an organizer connecting Stripe mid-event doesn't
+// retroactively change how already-saved cards get charged.
+
+// Platform fee, as a percent of the deposit, only ever applied when the
+// charge is going through a connected account (there's nothing to take a
+// cut of on the platform's own account, that money is already yours).
+// Read from an env var so the rate can change without a code deploy.
+const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '3');
 
 async function chargeAttendee(attendee, event) {
+  const requestOptions = attendee.stripe_account_id
+    ? { stripeAccount: attendee.stripe_account_id }
+    : undefined;
+
+  const applicationFeeAmount = attendee.stripe_account_id
+    ? Math.round(event.deposit_amount_cents * (PLATFORM_FEE_PERCENT / 100))
+    : undefined;
+
   try {
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: event.deposit_amount_cents,
-      currency: event.currency || 'usd',
-      customer: attendee.stripe_customer_id,
-      payment_method: attendee.stripe_payment_method_id,
-      off_session: true,
-      confirm: true,
-      description: `No-show deposit for ${event.name}`,
-      metadata: { eventId: event.id, attendeeId: attendee.id },
-    });
+    const paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount: event.deposit_amount_cents,
+        currency: event.currency || 'usd',
+        customer: attendee.stripe_customer_id,
+        payment_method: attendee.stripe_payment_method_id,
+        off_session: true,
+        confirm: true,
+        description: `No-show deposit for ${event.name}`,
+        metadata: { eventId: event.id, attendeeId: attendee.id },
+        ...(applicationFeeAmount ? { application_fee_amount: applicationFeeAmount } : {}),
+      },
+      requestOptions
+    );
 
     await supabaseAdmin
       .from('attendees')
       .update({
         charge_status: 'charged',
         stripe_charge_id: paymentIntent.id,
+        stripe_application_fee_cents: applicationFeeAmount ?? null,
       })
       .eq('id', attendee.id);
 

@@ -4,6 +4,27 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
+// Colors and labels for each attendee charge_status, used to render a
+// small badge instead of raw mono status text, so the state reads at a
+// glance instead of needing to parse a code-like word.
+function attendeeStatusMeta(status) {
+  switch (status) {
+    case 'charged':
+      return { label: 'Charged', bg: '#fdf2ef', color: 'var(--clay)', dot: 'var(--clay)' };
+    case 'not_charged':
+      return { label: 'Not charged', bg: '#dcfce7', color: '#16a34a', dot: '#22c55e' };
+    case 'invited':
+      return { label: 'Invited', bg: '#fbeecb', color: 'var(--marigold-dark)', dot: 'var(--marigold-dark)' };
+    case 'cancelled':
+      return { label: 'Cancelled', bg: '#f3f4f6', color: 'var(--ink-soft)', dot: '#9ca3af' };
+    case 'charge_failed':
+      return { label: 'Charge failed', bg: '#fdf2ef', color: 'var(--clay)', dot: 'var(--clay)' };
+    case 'pending':
+    default:
+      return { label: 'Pending', bg: '#f3f4f6', color: 'var(--ink-soft)', dot: '#9ca3af' };
+  }
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -367,6 +388,18 @@ export default function EventDetailPage() {
   const depositAmount = event.deposit_amount_cents / 100;
   const revenueProtected = chargedCount * depositAmount;
 
+  // Sums the exact fee actually taken per charge, not a fresh percentage
+  // calculation, so this stays historically accurate even if the fee
+  // rate changes later. Attendees charged on the platform account
+  // (unconnected organizers) never had a fee applied, so this is 0 for
+  // events where nothing routed through a connected account.
+  const platformFeeTotalCents = attendees
+    .filter((a) => a.charge_status === 'charged')
+    .reduce((sum, a) => sum + (a.stripe_application_fee_cents || 0), 0);
+  const platformFeeTotal = platformFeeTotalCents / 100;
+  const netToOrganizer = revenueProtected - platformFeeTotal;
+  const hadConnectedCharges = platformFeeTotalCents > 0;
+
   // Filtering and pagination for the attendee list, this stays a plain
   // computation (not useMemo) since it sits after this component's early
   // returns for loading/not-found, and hooks can't be called after a
@@ -438,17 +471,8 @@ export default function EventDetailPage() {
           <p className="font-display text-2xl">{totalAttendees}</p>
         </div>
         <div className="panel p-4">
-          {event.status === 'charges_processed' ? (
-            <>
-              <p className="eyebrow mb-1">Recovered</p>
-              <p className="font-display text-2xl font-mono">${revenueProtected.toFixed(2)}</p>
-            </>
-          ) : (
-            <>
-              <p className="eyebrow mb-1">Deposits secured</p>
-              <p className="font-display text-2xl">{pendingCount}/{totalAttendees}</p>
-            </>
-          )}
+          <p className="eyebrow mb-1">Deposits secured</p>
+          <p className="font-display text-2xl">{securedDepositCount}/{totalAttendees}</p>
         </div>
         <div className="panel p-4">
           <p className="eyebrow mb-1">Checked in</p>
@@ -465,12 +489,20 @@ export default function EventDetailPage() {
           <p className="text-sm text-ink-soft mb-1">
             {totalAttendees} signups, {securedDepositCount} secured a deposit, {chargedCount} didn&apos;t show.
           </p>
-          <p className="font-display text-2xl">
-            We recovered <span style={{ color: 'var(--marigold-dark)' }}>${revenueProtected.toFixed(2)}</span> for your event 🎉
-          </p>
-          <p className="text-xs text-ink-soft mt-2">
-            *Gross amount, before Stripe processing and RSVproof service fees.
-          </p>
+          {chargedCount === 0 ? (
+            <p className="font-display text-2xl">
+              Everyone showed up 🎉
+            </p>
+          ) : (
+            <>
+              <p className="font-display text-2xl">
+                We recovered <span style={{ color: 'var(--marigold-dark)' }}>${revenueProtected.toFixed(2)}</span> for your event 🎉
+              </p>
+              <p className="text-xs text-ink-soft mt-2">
+                *Gross amount, before Stripe processing and RSVproof service fees.
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -639,44 +671,51 @@ export default function EventDetailPage() {
             )}
 
             <ul className="divide-y divide-line">
-              {paginatedAttendees.map((a) => (
-                <li key={a.id} className="py-3 flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-medium">{a.name}</p>
-                    <p className="text-xs text-ink-soft">{a.email || a.phone}</p>
-                  </div>
-                  <div className="text-right">
-                    {a.checked_in_at ? (
-                      <span className="text-xs text-marigold-dark font-medium">
-                        Checked in ({a.checked_in_method})
+              {paginatedAttendees.map((a) => {
+                const statusMeta = attendeeStatusMeta(a.charge_status);
+                return (
+                  <li key={a.id} className="py-3 flex justify-between items-center gap-3">
+                    <div>
+                      <p className="text-sm font-medium">{a.name}</p>
+                      <p className="text-xs text-ink-soft">{a.email || a.phone}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      {a.checked_in_at ? (
+                        <span className="text-xs text-marigold-dark font-medium">
+                          Checked in ({a.checked_in_method})
+                        </span>
+                      ) : a.charge_status === 'cancelled' ? (
+                        <span className="text-xs text-ink-soft">Deposit cancelled</span>
+                      ) : (
+                        <button
+                          onClick={() => manualCheckIn(a.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+                        >
+                          Mark checked in
+                        </button>
+                      )}
+                      {a.charge_status === 'invited' && (
+                        <button
+                          onClick={() => resendInvite(a.id)}
+                          className="text-xs underline text-ink-soft hover:text-ink"
+                        >
+                          Resend invite
+                        </button>
+                      )}
+                      <span
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+                        style={{ background: statusMeta.bg, color: statusMeta.color }}
+                      >
+                        <span
+                          className="inline-block w-1.5 h-1.5 rounded-full"
+                          style={{ background: statusMeta.dot }}
+                        />
+                        {statusMeta.label}
                       </span>
-                    ) : a.charge_status === 'cancelled' ? (
-                      <span className="text-xs text-ink-soft">Deposit cancelled</span>
-                    ) : (
-                      <button
-                        onClick={() => manualCheckIn(a.id)}
-                        className="text-xs underline text-ink-soft"
-                      >
-                        Mark checked in
-                      </button>
-                    )}
-                    {a.charge_status === 'invited' && (
-                      <button
-                        onClick={() => resendInvite(a.id)}
-                        className="text-xs underline text-ink-soft block mt-1"
-                      >
-                        Resend invite
-                      </button>
-                    )}
-                    <p
-                      className="text-xs mt-1 font-mono"
-                      style={a.charge_status === 'charge_failed' ? { color: 'var(--clay)', fontWeight: 600 } : { color: 'var(--ink-soft)' }}
-                    >
-                      {a.charge_status}
-                    </p>
-                  </div>
-                </li>
-              ))}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
 
             {filteredAttendees.length > ATTENDEES_PER_PAGE && (
@@ -710,8 +749,8 @@ export default function EventDetailPage() {
           <div className="lg:sticky lg:top-6 space-y-3">
             {!event.eventbrite_event_id && (
               <div className="panel p-4">
-                <p className="text-xs text-ink-soft mb-1.5">Signup link</p>
-                <p className="text-xs text-ink-soft mb-2">Post this on Instagram, etc.</p>
+                <p className="text-xs text-ink-soft mb-1.5">Ticket link</p>
+                <p className="text-xs text-ink-soft mb-2">Share this with attendees.</p>
                 <code className="font-mono text-xs bg-paper-dim px-3 py-2 rounded-lg block break-all mb-2">
                   {signupLink}
                 </code>
