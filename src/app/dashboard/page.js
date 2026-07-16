@@ -117,7 +117,7 @@ export default function DashboardPage() {
       </div>
 
       {events.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 mb-6">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-ink-soft uppercase tracking-wide">Show</span>
             {[
