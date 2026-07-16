@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { resend } from '@/lib/resend';
 import { checkEventbriteEventCancelled } from '@/lib/eventbrite';
 import { cancelEventAndAttendees } from '@/lib/cancelEvent';
 
@@ -22,6 +23,66 @@ import { cancelEventAndAttendees } from '@/lib/cancelEvent';
 // cut of on the platform's own account, that money is already yours).
 // Read from an env var so the rate can change without a code deploy.
 const PLATFORM_FEE_PERCENT = parseFloat(process.env.PLATFORM_FEE_PERCENT || '3');
+
+// Where to send the "you collected money on someone's behalf" notice.
+// info@rsvproof.com already forwards to a personal inbox via Cloudflare
+// Email Routing, so this doesn't need its own env var or destination setup.
+const PAYOUT_NOTIFICATION_EMAIL = 'info@rsvproof.com';
+
+// When a charge lands directly on the platform account (no connected
+// account on file for this attendee), that money now needs to be
+// manually paid out to the organizer, and nothing else in the system
+// surfaces that fact on its own, the unpaid_payouts view only shows up
+// if someone thinks to query it. This closes that gap: fire an email the
+// moment the money actually lands, so a payout obligation is never
+// silent.
+async function notifyManualPayoutOwed(attendee, event) {
+  if (!resend) return;
+
+  try {
+    const { data: organizer } = await supabaseAdmin
+      .from('organizer_profiles')
+      .select('business_name, manual_payout_method, manual_payout_handle')
+      .eq('id', event.organizer_id)
+      .single();
+
+    const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
+    const payoutMethod = organizer?.manual_payout_method || 'not set';
+    const payoutHandle = organizer?.manual_payout_handle || 'not set';
+    const organizerLabel = organizer?.business_name || event.organizer_id;
+
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+      to: PAYOUT_NOTIFICATION_EMAIL,
+      subject: `Payout owed: ${depositDisplay} for ${event.name}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #1c1b17;">
+          <p style="font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #a9740f; margin: 0 0 8px;">
+            Manual payout needed
+          </p>
+          <h1 style="font-size: 20px; margin: 0 0 16px;">${depositDisplay} collected for "${event.name}"</h1>
+          <p style="margin: 0 0 4px;"><strong>Organizer:</strong> ${organizerLabel}</p>
+          <p style="margin: 0 0 4px;"><strong>Payout method:</strong> ${payoutMethod}</p>
+          <p style="margin: 0 0 16px;"><strong>Handle:</strong> ${payoutHandle}</p>
+          <p style="margin: 0 0 16px; color: #5b574c; font-size: 14px;">
+            This organizer isn't connected to Stripe, so this no-show charge landed
+            on the platform account instead of paying out automatically. Mark it
+            paid once sent:
+          </p>
+          <pre style="background: #f3eee3; padding: 12px; border-radius: 8px; font-size: 13px; overflow-x: auto;">update events set payout_status = 'paid', payout_marked_paid_at = now() where id = '${event.id}';</pre>
+        </div>
+      `,
+    });
+  } catch (err) {
+    // Never let a failed notification email block or fail the actual
+    // charge, the charge already succeeded and is the important part,
+    // this is a best-effort convenience on top of it.
+    console.error('Failed to send manual payout notification:', err.message, {
+      eventId: event.id,
+      attendeeId: attendee.id,
+    });
+  }
+}
 
 async function chargeAttendee(attendee, event) {
   const requestOptions = attendee.stripe_account_id
@@ -56,6 +117,13 @@ async function chargeAttendee(attendee, event) {
         stripe_application_fee_cents: applicationFeeAmount ?? null,
       })
       .eq('id', attendee.id);
+
+    // Only the direct-to-platform path needs a manual payout notice,
+    // connected-account charges already paid the organizer automatically
+    // as part of the charge itself.
+    if (!attendee.stripe_account_id) {
+      await notifyManualPayoutOwed(attendee, event);
+    }
 
     return { attendeeId: attendee.id, status: 'charged' };
   } catch (err) {
