@@ -702,16 +702,18 @@ export default function EventDetailPage() {
                           Resend invite
                         </button>
                       )}
-                      <span
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
-                        style={{ background: statusMeta.bg, color: statusMeta.color }}
-                      >
+                      {!(a.checked_in_at && a.charge_status === 'pending') && (
                         <span
-                          className="inline-block w-1.5 h-1.5 rounded-full"
-                          style={{ background: statusMeta.dot }}
-                        />
-                        {statusMeta.label}
-                      </span>
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+                          style={{ background: statusMeta.bg, color: statusMeta.color }}
+                        >
+                          <span
+                            className="inline-block w-1.5 h-1.5 rounded-full"
+                            style={{ background: statusMeta.dot }}
+                          />
+                          {statusMeta.label}
+                        </span>
+                      )}
                     </div>
                   </li>
                 );
@@ -769,13 +771,23 @@ export default function EventDetailPage() {
               <code className="font-mono text-xs bg-paper-dim px-3 py-2 rounded-lg block break-all mb-2">
                 {scannerLink}
               </code>
-              <button
-                type="button"
-                onClick={() => copyToClipboard(scannerLink, 'scanner')}
-                className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
-              >
-                {copiedLink === 'scanner' ? 'Copied' : 'Copy link'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(scannerLink, 'scanner')}
+                  className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+                >
+                  {copiedLink === 'scanner' ? 'Copied' : 'Copy link'}
+                </button>
+                <a
+                  href={scannerLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs px-3 py-1.5 rounded-lg border border-line text-ink-soft hover:border-ink hover:text-ink transition-colors"
+                >
+                  Open
+                </a>
+              </div>
             </div>
             {event.eventbrite_event_id && (
               <p className="text-xs text-ink-soft px-1">
@@ -794,7 +806,7 @@ export default function EventDetailPage() {
               <div className="pb-5 mb-5 border-b border-line">
                 <h3 className="text-sm font-semibold mb-1">Reminders <span className="text-ink-soft font-normal">(automatic)</span></h3>
                 <p className="text-sm text-ink-soft mb-3">
-                  Sends immediately instead of waiting for today&apos;s scheduled run.
+                  Sends immediately instead of waiting for the next automatic run.
                 </p>
                 <button
                   onClick={sendReminders}
@@ -805,9 +817,15 @@ export default function EventDetailPage() {
                   {sendingReminders ? 'Sending...' : 'Send reminders now'}
                 </button>
                 {reminderResult && (
-                  <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-                    {JSON.stringify(reminderResult, null, 2)}
-                  </pre>
+                  reminderResult.error ? (
+                    <p className="text-sm font-medium mt-3" style={{ color: 'var(--clay)' }}>
+                      Failed: {reminderResult.error}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium mt-3" style={{ color: '#16a34a' }}>
+                      Reminders sent ✓
+                    </p>
+                  )
                 )}
               </div>
 
@@ -835,7 +853,7 @@ export default function EventDetailPage() {
               <div>
                 <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
                 <p className="text-sm text-ink-soft mb-3">
-                  Runs immediately instead of waiting for today&apos;s scheduled run.
+                  Runs immediately instead of waiting for the next automatic run.
                 </p>
                 <button
                   onClick={runNoShowCharges}
@@ -850,9 +868,15 @@ export default function EventDetailPage() {
                     : 'Run no-show charges'}
                 </button>
                 {chargeResult && (
-                  <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-                    {JSON.stringify(chargeResult, null, 2)}
-                  </pre>
+                  chargeResult.error ? (
+                    <p className="text-sm font-medium mt-3" style={{ color: 'var(--clay)' }}>
+                      Failed: {chargeResult.error}
+                    </p>
+                  ) : (
+                    <p className="text-sm font-medium mt-3" style={{ color: '#16a34a' }}>
+                      Charges processed ✓
+                    </p>
+                  )
                 )}
               </div>
             </div>
