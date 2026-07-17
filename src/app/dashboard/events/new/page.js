@@ -49,8 +49,17 @@ export default function NewEventPage() {
         name: form.name,
         description: form.description,
         location: form.location,
-        event_date: form.event_date,
-        checkin_cutoff: form.checkin_cutoff,
+        // datetime-local inputs give back a plain "YYYY-MM-DDTHH:mm"
+        // string with no timezone. new Date() on a string in that exact
+        // shape is interpreted as the browser's local time (per the JS
+        // spec), so converting through a Date object here and calling
+        // toISOString() bakes in the correct UTC-equivalent instant
+        // before it reaches Postgres. Sending the raw string instead
+        // would let Postgres reinterpret "22:10" as 22:10 UTC rather
+        // than 22:10 local, silently shifting the stored time by
+        // whatever the organizer's UTC offset happens to be.
+        event_date: new Date(form.event_date).toISOString(),
+        checkin_cutoff: new Date(form.checkin_cutoff).toISOString(),
         deposit_amount_cents: null,
       })
       .select()

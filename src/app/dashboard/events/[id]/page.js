@@ -272,9 +272,16 @@ export default function EventDetailPage() {
     }
 
     setSavingDetails(true);
+    // Same conversion as event creation: a datetime-local value has no
+    // timezone attached, so it must be routed through a Date object
+    // (interpreted as local time by the JS engine) and reserialized with
+    // toISOString() before it reaches Postgres, otherwise the raw string
+    // gets reinterpreted as UTC and the stored time silently shifts by
+    // the organizer's UTC offset.
+    const writeValue = isDateField ? new Date(value).toISOString() : value;
     await supabase
       .from('events')
-      .update({ [field]: value })
+      .update({ [field]: writeValue })
       .eq('id', id);
     await load();
     setSavingDetails(false);
