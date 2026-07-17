@@ -112,11 +112,12 @@ export default function GuidePage() {
             charged.
           </p>
           <p>
-            The deposit amount can be changed any time from the event page,
-            click the number to edit it, it saves automatically when you
-            click away or press Enter. Changing it only affects deposits
-            secured after that point, it doesn&apos;t retroactively change
-            holds already in place.
+            The deposit amount, name, location, and start time can all be
+            changed from the event page, right up until the first person
+            signs up. Click a field to edit it, it saves automatically
+            when you click away or press Enter. Once someone has secured a
+            deposit, all of these lock in place, so the details in their
+            confirmation email always stay accurate.
           </p>
           <p>
             Every standalone event gets its own <strong className="text-ink">signup

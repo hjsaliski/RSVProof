@@ -643,31 +643,41 @@ export default function EventDetailPage() {
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-ink-soft">Deposit amount</span>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-ink-soft">$</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={depositInput}
-                  onChange={(e) => setDepositInput(e.target.value)}
-                  onBlur={saveDepositAmount}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.target.blur();
-                    if (e.key === 'Escape') {
-                      setDepositInput(event.deposit_amount_cents != null ? (event.deposit_amount_cents / 100).toFixed(2) : '');
-                      e.target.blur();
-                    }
-                  }}
-                  className="deposit-amount-input font-mono font-medium text-sm w-20 px-2 py-1 rounded-md border bg-white text-right outline-none focus:shadow-sm transition-shadow duration-150"
-                  style={{ borderColor: 'var(--line)', color: '#16a34a' }}
-                />
-                {savingDeposit && <span className="text-xs text-ink-soft">Saving...</span>}
-                {depositSaved && (
-                  <span className="text-xs" style={{ color: '#16a34a' }}>Saved</span>
-                )}
-              </div>
+              {totalAttendees === 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-ink-soft">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={depositInput}
+                    onChange={(e) => setDepositInput(e.target.value)}
+                    onBlur={saveDepositAmount}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') e.target.blur();
+                      if (e.key === 'Escape') {
+                        setDepositInput(event.deposit_amount_cents != null ? (event.deposit_amount_cents / 100).toFixed(2) : '');
+                        e.target.blur();
+                      }
+                    }}
+                    className="deposit-amount-input font-mono font-medium text-sm w-20 px-2 py-1 rounded-md border bg-white text-right outline-none focus:shadow-sm transition-shadow duration-150"
+                    style={{ borderColor: 'var(--line)', color: '#16a34a' }}
+                  />
+                  {savingDeposit && <span className="text-xs text-ink-soft">Saving...</span>}
+                  {depositSaved && (
+                    <span className="text-xs" style={{ color: '#16a34a' }}>Saved</span>
+                  )}
+                </div>
+              ) : (
+                <span className="font-mono font-medium">${depositAmount.toFixed(2)}</span>
+              )}
             </div>
+            {totalAttendees > 0 && (
+              <p className="text-xs text-ink-soft -mt-2">
+                Locked, this event already has {totalAttendees} signup{totalAttendees > 1 ? 's' : ''}
+                {' '}holding a deposit at this amount.
+              </p>
+            )}
             <style>{`
               .deposit-amount-input::-webkit-outer-spin-button,
               .deposit-amount-input::-webkit-inner-spin-button {
