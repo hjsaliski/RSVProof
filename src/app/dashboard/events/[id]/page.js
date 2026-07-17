@@ -1024,8 +1024,8 @@ export default function EventDetailPage() {
                 <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
                 <p className="text-sm text-ink-soft mb-3">
                   Charged automatically at the event&apos;s check-in cutoff
-                  time. Click this button to manually trigger charges now
-                  instead.
+                  time. This button is here as a backup, click it if you
+                  ever want to make sure charges have gone through.
                 </p>
                 <button
                   onClick={runNoShowCharges}

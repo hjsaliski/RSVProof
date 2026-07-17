@@ -15,7 +15,25 @@ async function sendReminder(attendee, event, businessName) {
   if (!attendee.email || !resend) return { attendeeId: attendee.id, status: 'skipped_no_email' };
 
   const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
-  const eventDateDisplay = new Date(event.event_date).toLocaleString();
+  // Server-rendered emails run on Vercel, which formats dates in UTC by
+  // default, not the organizer's or attendee's local time. Pinning an
+  // explicit timeZone here converts the stored UTC instant back to the
+  // time a person actually reads as correct. Hardcoded to Central since
+  // that's the only region RSVproof serves today; if organizers outside
+  // that timezone are ever supported, this needs to become a per-event
+  // or per-organizer setting instead of a fixed constant.
+  const eventDateDisplay = new Date(event.event_date).toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+  // Same derivation as the confirmation email, so the link points at
+  // whichever domain is actually serving the app rather than being
+  // hardcoded, and stays correct if that env var ever changes.
+  const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
+    ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
+    : '';
+  const cancelLink = `${siteUrl}/cancel/${attendee.cancel_token}`;
 
   // Re-attaches a fresh copy of the same check-in code rather than
   // linking out to a separate page, this is meant to work as "another
@@ -60,7 +78,10 @@ async function sendReminder(attendee, event, businessName) {
                 code, and your ${depositDisplay} hold is released. Miss
                 check-in, and it's charged.
               </p>
-              <img src="${qrImageUrl}" alt="Your check-in QR code" width="220" height="220" style="display: block; margin: 0 auto;" />
+              <img src="${qrImageUrl}" alt="Your check-in QR code" width="220" height="220" style="display: block; margin: 0 auto 16px;" />
+              <p style="font-size: 12px; color: #a39d8c; margin: 0;">
+                Can't make it? <a href="${cancelLink}" style="color: #a39d8c;">Cancel your deposit</a>
+              </p>
             </div>
           </div>
         </div>
