@@ -90,8 +90,12 @@ export default function GuidePage() {
             waiting for a new one to auto-create.
           </p>
           <p>
-            Once linked, new RSVPs on Eventbrite automatically get invited by
-            email to secure a deposit here, no manual re-entry on your end.
+            For a linked event, attendees still sign up on{' '}
+            <strong className="text-ink">Eventbrite itself</strong>, not through
+            RSVproof, so there&apos;s no separate RSVproof signup link to share
+            for these events. Once someone RSVPs on Eventbrite, they&apos;re
+            automatically sent an email with a link to secure their deposit
+            here, no manual re-entry on your end.
           </p>
         </div>
       </section>

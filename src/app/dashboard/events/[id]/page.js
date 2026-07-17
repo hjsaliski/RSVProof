@@ -829,26 +829,34 @@ export default function EventDetailPage() {
                 )}
               </div>
 
-              <div className="pb-5 mb-5 border-b border-line">
-                <h3 className="text-sm font-semibold mb-1">Invited, not yet secured <span className="text-ink-soft font-normal">(manual only)</span></h3>
-                <p className="text-sm text-ink-soft mb-3">
-                  RSVP&apos;d on a connected platform, but hasn&apos;t secured a deposit yet.
-                </p>
-                <p className="font-display text-2xl mb-3">{invitedCount}</p>
-                <button
-                  onClick={remindAllInvited}
-                  disabled={remindingInvited || invitedCount === 0}
-                  className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                  style={{ background: 'var(--marigold-dark)' }}
-                >
-                  {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
-                </button>
-                {remindInvitedResult && (
-                  <pre className="font-mono text-xs bg-paper-dim p-3 rounded-lg mt-3 overflow-auto">
-                    {JSON.stringify(remindInvitedResult, null, 2)}
-                  </pre>
-                )}
-              </div>
+              {event.eventbrite_event_id && (
+                <div className="pb-5 mb-5 border-b border-line">
+                  <h3 className="text-sm font-semibold mb-1">Invited, not yet secured <span className="text-ink-soft font-normal">(manual only)</span></h3>
+                  <p className="text-sm text-ink-soft mb-3">
+                    RSVP&apos;d on a connected platform, but hasn&apos;t secured a deposit yet.
+                  </p>
+                  <p className="font-display text-2xl mb-3">{invitedCount}</p>
+                  <button
+                    onClick={remindAllInvited}
+                    disabled={remindingInvited || invitedCount === 0}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                    style={{ background: 'var(--marigold-dark)' }}
+                  >
+                    {remindingInvited ? 'Sending...' : `Remind all invited (${invitedCount})`}
+                  </button>
+                  {remindInvitedResult && (
+                    remindInvitedResult.failed > 0 ? (
+                      <p className="text-sm font-medium mt-3" style={{ color: 'var(--clay)' }}>
+                        Sent {remindInvitedResult.sent} of {remindInvitedResult.sent + remindInvitedResult.failed}, {remindInvitedResult.failed} failed.
+                      </p>
+                    ) : (
+                      <p className="text-sm font-medium mt-3" style={{ color: '#16a34a' }}>
+                        Reminders sent ✓ ({remindInvitedResult.sent})
+                      </p>
+                    )
+                  )}
+                </div>
+              )}
 
               <div>
                 <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
@@ -921,9 +929,7 @@ export default function EventDetailPage() {
                 <h3 className="text-sm font-semibold mb-1">Delete this event</h3>
                 <p className="text-sm text-ink-soft mb-3">
                   Permanently removes this event and every attendee signup attached to
-                  it, including their saved card references. This cannot be undone,
-                  and unlike cancelling, no one is notified. Only use this for an
-                  event that never really happened, like a test, not a real event
+                  it, including their saved card references. Do not use this for a real event
                   you&apos;re calling off, use Cancel above for that.
                 </p>
                 <button
