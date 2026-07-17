@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata = {
   title: "RSVproof",
@@ -16,6 +17,7 @@ export default function RootLayout({ children }) {
           <a href="mailto:info@rsvproof.com" className="underline">Contact us</a>
           {' '}(info@rsvproof.com)
         </footer>
+        <Analytics />
       </body>
     </html>
   );
