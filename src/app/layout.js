@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Event Deposits",
-  description: "No-show deposits for free pop-up events",
+  title: "RSVproof",
+  description: "Refundable deposit holds that cut no-shows at free events",
 };
 
 export default function RootLayout({ children }) {
@@ -12,7 +12,8 @@ export default function RootLayout({ children }) {
         {children}
         <footer className="py-6 px-6 text-center text-xs text-ink-soft border-t border-line">
           <a href="/terms" className="underline mr-4">Terms of Service</a>
-          <a href="/privacy" className="underline">Privacy Policy</a>
+          <a href="/privacy" className="underline mr-4">Privacy Policy</a>
+          <a href="mailto:info@rsvproof.com" className="underline">Contact us</a>
         </footer>
       </body>
     </html>

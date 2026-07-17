@@ -141,8 +141,8 @@ export default function GuidePage() {
               deposit but hasn&apos;t checked in yet gets an automatic email
               reminding them the event is close and that checking in at
               arrival is what releases their hold. This runs on its own
-              once a day, you don&apos;t need to do anything. Each attendee
-              only ever gets this reminder once.
+              in the lead-up to the event, you don&apos;t need to do
+              anything. Each attendee only ever gets this reminder once.
             </p>
           </div>
           <div>
@@ -169,9 +169,8 @@ export default function GuidePage() {
               After an event&apos;s check-in cutoff passes, everyone who wasn&apos;t
               checked in gets charged their deposit automatically, and
               everyone who was checked in is marked as not charged. This
-              also runs on its own once a day, so there can be a delay of
-              several hours between your cutoff passing and the automatic
-              charge catching up to it.
+              also runs on its own within the timeframe after your cutoff
+              passes, you don&apos;t need to trigger it yourself.
             </p>
           </div>
           <div>
