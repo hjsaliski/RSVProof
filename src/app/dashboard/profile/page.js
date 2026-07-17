@@ -443,6 +443,14 @@ function ProfilePageInner() {
       >
         Log out
       </button>
+
+      <p className="text-xs text-ink-soft text-center mt-4">
+        Want to delete your account? Email{' '}
+        <a href="mailto:info@rsvproof.com" className="underline hover:text-ink">
+          info@rsvproof.com
+        </a>{' '}
+        and we&apos;ll take care of it.
+      </p>
     </main>
   );
 }
