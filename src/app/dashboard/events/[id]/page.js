@@ -257,6 +257,20 @@ export default function EventDetailPage() {
       : event[field];
     if (value === current) return;
 
+    // Cutoff must never land before the event's own start time, checked
+    // against whichever value is currently saved for the other field
+    // (always up to date since every save below reloads the event).
+    if (field === 'event_date' && new Date(value) > new Date(event.checkin_cutoff)) {
+      alert('Start time can\'t be after the check-in cutoff. Update the cutoff first, or pick an earlier start time.');
+      setEventDateInput(toLocalInput(event.event_date));
+      return;
+    }
+    if (field === 'checkin_cutoff' && new Date(value) < new Date(event.event_date)) {
+      alert('Check-in cutoff can\'t be before the event start time.');
+      setCheckinCutoffInput(toLocalInput(event.checkin_cutoff));
+      return;
+    }
+
     setSavingDetails(true);
     await supabase
       .from('events')
@@ -1008,7 +1022,12 @@ export default function EventDetailPage() {
                 </p>
                 <button
                   onClick={runNoShowCharges}
-                  disabled={charging || event.status === 'charges_processed' || event.status === 'cancelled'}
+                  disabled={
+                    charging ||
+                    event.status === 'charges_processed' ||
+                    event.status === 'cancelled' ||
+                    new Date() < new Date(event.checkin_cutoff)
+                  }
                   className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
                   style={{ background: 'var(--clay)' }}
                 >
@@ -1016,10 +1035,17 @@ export default function EventDetailPage() {
                     ? 'Event cancelled'
                     : event.status === 'charges_processed'
                     ? 'Already processed'
+                    : new Date() < new Date(event.checkin_cutoff)
+                    ? 'Not yet at cutoff'
                     : charging
                     ? 'Processing...'
                     : 'Run no-show charges'}
                 </button>
+                {event.status === 'active' && new Date() < new Date(event.checkin_cutoff) && (
+                  <p className="text-xs text-ink-soft mt-2">
+                    Available once the check-in cutoff passes, {new Date(event.checkin_cutoff).toLocaleString()}.
+                  </p>
+                )}
                 {chargeResult && (
                   chargeResult.error ? (
                     <p className="text-sm font-medium mt-3" style={{ color: 'var(--clay)' }}>

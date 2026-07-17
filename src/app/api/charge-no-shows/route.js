@@ -273,6 +273,16 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
+    // The dashboard button already hides itself before the cutoff, this
+    // is the real enforcement, so a direct API call can't charge someone
+    // before the deadline they were actually promised.
+    if (new Date() < new Date(event.checkin_cutoff)) {
+      return NextResponse.json(
+        { error: 'Check-in cutoff hasn\'t passed yet for this event.' },
+        { status: 400 }
+      );
+    }
+
     const results = await processEvent(event);
     return NextResponse.json({ processed: 1, results });
   }

@@ -36,6 +36,12 @@ export default function NewEventPage() {
     // default (its normal column default) until an amount is actually set,
     // the same guard already in place on the event dashboard prevents
     // turning deposits on with nothing configured.
+    if (new Date(form.checkin_cutoff) < new Date(form.event_date)) {
+      setError('Check-in cutoff can\'t be before the event start time.');
+      setLoading(false);
+      return;
+    }
+
     const { data, error: insertError } = await supabase
       .from('events')
       .insert({
