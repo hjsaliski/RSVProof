@@ -56,6 +56,22 @@ export default function EventDetailPage() {
   const [linkingId, setLinkingId] = useState('');
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState('');
+  const [nameInput, setNameInput] = useState('');
+  const [locationInput, setLocationInput] = useState('');
+  const [eventDateInput, setEventDateInput] = useState('');
+  const [checkinCutoffInput, setCheckinCutoffInput] = useState('');
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsSaved, setDetailsSaved] = useState(false);
+
+  // Converts a stored ISO timestamp into the "YYYY-MM-DDTHH:mm" shape a
+  // datetime-local input expects, in the browser's local time, mirroring
+  // how the create-event form already handles these same two fields.
+  function toLocalInput(isoString) {
+    if (!isoString) return '';
+    const d = new Date(isoString);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 
   useEffect(() => {
     setSiteUrl(window.location.origin);
@@ -79,6 +95,10 @@ export default function EventDetailPage() {
     setDepositInput(
       eventData?.deposit_amount_cents != null ? (eventData.deposit_amount_cents / 100).toFixed(2) : ''
     );
+    setNameInput(eventData?.name || '');
+    setLocationInput(eventData?.location || '');
+    setEventDateInput(toLocalInput(eventData?.event_date));
+    setCheckinCutoffInput(toLocalInput(eventData?.checkin_cutoff));
 
     const { data: attendeeData } = await supabase
       .from('attendees')
@@ -217,6 +237,35 @@ export default function EventDetailPage() {
     setSavingDeposit(false);
     setDepositSaved(true);
     setTimeout(() => setDepositSaved(false), 1500);
+  }
+
+  async function saveEventField(field, value) {
+    // Empty name/location or an unparseable date would corrupt the event,
+    // so bail out and revert rather than writing something broken.
+    const isDateField = field === 'event_date' || field === 'checkin_cutoff';
+    if (!value || (isDateField && isNaN(new Date(value).getTime()))) {
+      setNameInput(event.name || '');
+      setLocationInput(event.location || '');
+      setEventDateInput(toLocalInput(event.event_date));
+      setCheckinCutoffInput(toLocalInput(event.checkin_cutoff));
+      return;
+    }
+
+    // Skip the write if nothing actually changed, same as deposit amount.
+    const current = field === 'event_date' || field === 'checkin_cutoff'
+      ? toLocalInput(event[field])
+      : event[field];
+    if (value === current) return;
+
+    setSavingDetails(true);
+    await supabase
+      .from('events')
+      .update({ [field]: value })
+      .eq('id', id);
+    await load();
+    setSavingDetails(false);
+    setDetailsSaved(true);
+    setTimeout(() => setDetailsSaved(false), 1500);
   }
 
   async function manualCheckIn(attendeeId) {
@@ -379,6 +428,12 @@ export default function EventDetailPage() {
   const pendingCount = attendees.filter((a) => a.charge_status === 'pending').length;
   const invitedCount = attendees.filter((a) => a.charge_status === 'invited').length;
   const totalAttendees = attendees.length;
+  // Name, location, start time, and cutoff are only safe to change before
+  // anyone has signed up, once someone has a confirmation email in their
+  // inbox with the original details baked in, or is linked from
+  // Eventbrite (where Eventbrite is the source of truth), editing here
+  // would drift out of sync with what they were told.
+  const isEventEditable = !event.eventbrite_event_id && totalAttendees === 0;
   const securedCount = totalAttendees - invitedCount;
   const securedDepositCount = attendees.filter((a) =>
     ['pending', 'charged', 'not_charged'].includes(a.charge_status)
@@ -510,6 +565,57 @@ export default function EventDetailPage() {
         <div className="lg:col-span-2 space-y-5">
           <div className="panel p-5 space-y-4">
             <h2 className="font-medium">Settings</h2>
+
+            {isEventEditable ? (
+              <div className="space-y-3 pb-4 border-b border-line">
+                <div>
+                  <label className="block text-xs text-ink-soft mb-1">Event name</label>
+                  <input
+                    type="text"
+                    value={nameInput}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    onBlur={(e) => saveEventField('name', e.target.value)}
+                    className="field w-full px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-soft mb-1">Location</label>
+                  <input
+                    type="text"
+                    value={locationInput}
+                    onChange={(e) => setLocationInput(e.target.value)}
+                    onBlur={(e) => saveEventField('location', e.target.value)}
+                    className="field w-full px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-soft mb-1">Start time</label>
+                  <input
+                    type="datetime-local"
+                    value={eventDateInput}
+                    onChange={(e) => setEventDateInput(e.target.value)}
+                    onBlur={(e) => saveEventField('event_date', e.target.value)}
+                    className="field w-full px-3 py-1.5 text-sm"
+                  />
+                </div>
+                {(savingDetails || detailsSaved) && (
+                  <p className="text-xs" style={{ color: savingDetails ? 'var(--ink-soft)' : '#16a34a' }}>
+                    {savingDetails ? 'Saving...' : 'Saved'}
+                  </p>
+                )}
+                <p className="text-xs text-ink-soft">
+                  These fields lock once someone signs up, so the details
+                  in their confirmation email always stay accurate.
+                </p>
+              </div>
+            ) : totalAttendees > 0 && !event.eventbrite_event_id && (
+              <p className="text-xs text-ink-soft pb-4 border-b border-line">
+                Name, location, and start time are locked, this event
+                already has {totalAttendees} signup{totalAttendees > 1 ? 's' : ''}
+                {' '}with these details in their confirmation email.
+              </p>
+            )}
+
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-sm text-ink-soft block">Deposits enabled for this event</span>
@@ -574,7 +680,17 @@ export default function EventDetailPage() {
             `}</style>
             <div className="flex items-center justify-between text-sm">
               <span className="text-ink-soft">Check-in cutoff</span>
-              <span className="font-mono font-medium">{new Date(event.checkin_cutoff).toLocaleString()}</span>
+              {isEventEditable ? (
+                <input
+                  type="datetime-local"
+                  value={checkinCutoffInput}
+                  onChange={(e) => setCheckinCutoffInput(e.target.value)}
+                  onBlur={(e) => saveEventField('checkin_cutoff', e.target.value)}
+                  className="field font-mono text-xs px-2 py-1 w-auto"
+                />
+              ) : (
+                <span className="font-mono font-medium">{new Date(event.checkin_cutoff).toLocaleString()}</span>
+              )}
             </div>
             <div className="flex items-center justify-between border-t border-line pt-3">
               <div>
@@ -806,7 +922,8 @@ export default function EventDetailPage() {
               <div className="pb-5 mb-5 border-b border-line">
                 <h3 className="text-sm font-semibold mb-1">Reminders <span className="text-ink-soft font-normal">(automatic)</span></h3>
                 <p className="text-sm text-ink-soft mb-3">
-                  Sends immediately instead of waiting for the next automatic run.
+                  Sent automatically 24 hours before the event starts. Click
+                  this button to manually trigger reminders now instead.
                 </p>
                 <button
                   onClick={sendReminders}
@@ -861,7 +978,9 @@ export default function EventDetailPage() {
               <div>
                 <h3 className="text-sm font-semibold mb-1">No-show charges <span className="text-ink-soft font-normal">(automatic)</span></h3>
                 <p className="text-sm text-ink-soft mb-3">
-                  Runs immediately instead of waiting for the next automatic run.
+                  Charged automatically at the event&apos;s check-in cutoff
+                  time. Click this button to manually trigger charges now
+                  instead.
                 </p>
                 <button
                   onClick={runNoShowCharges}
