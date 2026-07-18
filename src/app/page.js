@@ -2,11 +2,11 @@ export default function Home() {
   return (
     <main className="flex-1">
       {/* Logo header, small and unobtrusive above the hero */}
-      <div className="max-w-5xl mx-auto px-6 pt-6 flex items-center gap-2.5">
+      <header className="max-w-5xl mx-auto px-6 py-6 flex items-center gap-2.5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-icon.png" alt="RSVproof" className="h-8 w-8 rounded-lg" />
         <span className="font-display text-lg text-ink">RSVproof</span>
-      </div>
+      </header>
 
       {/* Hero: the ticket is the thesis. A real claim check for a real spot. */}
       <section className="bg-dusk text-paper">

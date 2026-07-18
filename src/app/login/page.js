@@ -24,7 +24,11 @@ export default function LoginPage() {
     setLoading(false);
 
     if (signInError) {
-      setError(signInError.message);
+      if (signInError.message === 'Email not confirmed') {
+        setError('Check your email for a confirmation link before logging in, we sent one when you signed up.');
+      } else {
+        setError(signInError.message);
+      }
       return;
     }
 
