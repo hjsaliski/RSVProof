@@ -35,6 +35,23 @@ export default function SignupPage() {
     const { data, error: signUpError } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        // Without this, Supabase falls back to the Site URL default
+        // (the homepage) after someone clicks the confirmation link,
+        // which leaves them on a page with no clear next step. Sending
+        // them straight to /login instead means clicking the email link
+        // is the one and only path to finishing signup, no duplicate
+        // "log in now" button needed anywhere else in this flow.
+        emailRedirectTo: `${window.location.origin}/login`,
+        // There's no active session at this point (email confirmation
+        // is required, so signUp doesn't hand one back yet), which means
+        // a direct write to organizer_profiles below would silently fail
+        // the security check and never actually save. Storing it in the
+        // auth user's own metadata instead works regardless of session
+        // state, and gets picked up to create the real profile row the
+        // first time this person actually logs in (see login/page.js).
+        data: { business_name: businessName },
+      },
     });
 
     if (signUpError) {
@@ -44,6 +61,9 @@ export default function SignupPage() {
     }
 
     if (data.user) {
+      // Best-effort only, this succeeds if a session happens to already
+      // exist (e.g. email confirmation is ever turned off), and is a
+      // harmless no-op otherwise since login.js creates the row for real.
       await supabase.from('organizer_profiles').insert({
         id: data.user.id,
         business_name: businessName,
@@ -71,13 +91,10 @@ export default function SignupPage() {
         <div className="w-full max-w-sm text-center">
           <p className="eyebrow mb-2">One more step</p>
           <h1 className="font-display text-3xl mb-4">Confirm your email.</h1>
-          <p className="text-sm text-ink-soft mb-6">
+          <p className="text-sm text-ink-soft">
             We sent a confirmation link to <strong className="text-ink">{email}</strong>.
-            Click it to activate your account, then come back and log in.
+            Click it to activate your account and log in.
           </p>
-          <a href="/login" className="btn-primary inline-block py-2.5 px-6">
-            Go to login
-          </a>
         </div>
       </main>
     );

@@ -84,10 +84,10 @@ export default function GuidePage() {
             yourself.
           </p>
           <p>
-            Already had an Eventbrite event before connecting? Open that
-            event in RSVproof and use the <strong className="text-ink">Link</strong> button
-            under the Eventbrite panel to connect it manually instead of
-            waiting for a new one to auto-create.
+            This only picks up events going forward, if you already had
+            events live on Eventbrite before connecting, those won&apos;t
+            sync in. Only events created on Eventbrite after you connect
+            will show up here automatically.
           </p>
           <p>
             For a linked event, attendees still sign up on{' '}

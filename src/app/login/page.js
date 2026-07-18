@@ -16,14 +16,13 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    setLoading(false);
-
     if (signInError) {
+      setLoading(false);
       if (signInError.message === 'Email not confirmed') {
         setError('Check your email for a confirmation link before logging in, we sent one when you signed up.');
       } else {
@@ -32,6 +31,28 @@ export default function LoginPage() {
       return;
     }
 
+    // Now that there's a real session, make sure the organizer_profiles
+    // row actually exists, the signup-time write can't succeed before
+    // email confirmation (see signup/page.js), so this is the first
+    // point it's guaranteed safe to create it for real. Only fills in
+    // business_name from signup metadata if the row is missing entirely,
+    // never overwrites anything the person already saved later.
+    if (data.user) {
+      const { data: existingProfile } = await supabase
+        .from('organizer_profiles')
+        .select('id')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      if (!existingProfile) {
+        await supabase.from('organizer_profiles').insert({
+          id: data.user.id,
+          business_name: data.user.user_metadata?.business_name || '',
+        });
+      }
+    }
+
+    setLoading(false);
     router.push('/dashboard');
   }
 
