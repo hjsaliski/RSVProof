@@ -279,9 +279,17 @@ export default function EventDetailPage() {
     // gets reinterpreted as UTC and the stored time silently shifts by
     // the organizer's UTC offset.
     const writeValue = isDateField ? new Date(value).toISOString() : value;
+    const updatePayload = { [field]: writeValue };
+    // Re-anchor the timezone to wherever this edit is happening from,
+    // same reasoning as event creation, an edited start time should
+    // reflect the organizer's current location, not whatever place they
+    // happened to be in when the event was first created.
+    if (field === 'event_date') {
+      updatePayload.event_timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    }
     await supabase
       .from('events')
-      .update({ [field]: writeValue })
+      .update(updatePayload)
       .eq('id', id);
     await load();
     setSavingDetails(false);

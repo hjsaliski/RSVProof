@@ -18,12 +18,13 @@ async function sendReminder(attendee, event, businessName) {
   // Server-rendered emails run on Vercel, which formats dates in UTC by
   // default, not the organizer's or attendee's local time. Pinning an
   // explicit timeZone here converts the stored UTC instant back to the
-  // time a person actually reads as correct. Hardcoded to Central since
-  // that's the only region RSVproof serves today; if organizers outside
-  // that timezone are ever supported, this needs to become a per-event
-  // or per-organizer setting instead of a fixed constant.
+  // time a person actually reads as correct, using this specific
+  // event's own timezone (from Eventbrite directly, or captured from
+  // the organizer's browser at creation time for manual events) rather
+  // than assuming everyone is in Central. The fallback only matters for
+  // events created before event_timezone existed as a column.
   const eventDateDisplay = new Date(event.event_date).toLocaleString('en-US', {
-    timeZone: 'America/Chicago',
+    timeZone: event.event_timezone || 'America/Chicago',
     dateStyle: 'medium',
     timeStyle: 'short',
   });

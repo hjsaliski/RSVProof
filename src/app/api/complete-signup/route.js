@@ -129,12 +129,12 @@ export async function POST(request) {
       const qrImageUrl = qrPublicUrlData.publicUrl;
 
       const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
-      // Same fix as send-reminders: pin the display timezone explicitly
-      // rather than letting Vercel's server default (UTC) render it,
-      // since the stored value is now a correct UTC instant and needs
-      // converting back to the time a person actually reads as right.
+      // Same fix as send-reminders: use this event's own timezone rather
+      // than hardcoding Central, so the confirmation email shows the
+      // time correctly regardless of where the event actually is or
+      // where the organizer's browser happened to be at creation.
       const eventDateDisplay = new Date(event.event_date).toLocaleString('en-US', {
-        timeZone: 'America/Chicago',
+        timeZone: event.event_timezone || 'America/Chicago',
         dateStyle: 'medium',
         timeStyle: 'short',
       });

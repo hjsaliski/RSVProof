@@ -60,6 +60,12 @@ export default function NewEventPage() {
         // whatever the organizer's UTC offset happens to be.
         event_date: new Date(form.event_date).toISOString(),
         checkin_cutoff: new Date(form.checkin_cutoff).toISOString(),
+        // No Eventbrite data to pull a timezone from here, so the best
+        // available signal is wherever this organizer's browser actually
+        // is right now, which is what they had in mind when they typed
+        // these times in. Used later to format dates correctly in
+        // emails regardless of what timezone the server happens to run.
+        event_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         deposit_amount_cents: null,
       })
       .select()

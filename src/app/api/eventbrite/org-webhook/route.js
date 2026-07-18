@@ -66,6 +66,12 @@ export async function POST(request) {
       event_date: ebEvent.start?.utc,
       location,
       checkin_cutoff: ebEvent.end?.utc,
+      // Eventbrite tags every start/end time with the IANA zone the
+      // event itself was set up in (e.g. "America/Los_Angeles"),
+      // independent of whichever timezone the organizer's browser is
+      // currently in. Storing it here means emails display the time an
+      // attendee would actually recognize as correct for that event.
+      event_timezone: ebEvent.start?.timezone || null,
       deposit_amount_cents: null,
       deposit_enabled: false,
       source: 'eventbrite',
