@@ -30,9 +30,7 @@ async function sendReminder(attendee, event, businessName) {
   // Same derivation as the confirmation email, so the link points at
   // whichever domain is actually serving the app rather than being
   // hardcoded, and stays correct if that env var ever changes.
-  const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
-    ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
-    : '';
+  const siteUrl = process.env.SITE_URL || '';
   const cancelLink = `${siteUrl}/cancel/${attendee.cancel_token}`;
 
   // Re-attaches a fresh copy of the same check-in code rather than

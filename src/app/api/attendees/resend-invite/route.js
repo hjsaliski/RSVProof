@@ -54,9 +54,7 @@ export async function POST(request) {
   }
 
   const depositDisplay = `$${(event.deposit_amount_cents / 100).toFixed(2)}`;
-  const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
-    ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
-    : '';
+  const siteUrl = process.env.SITE_URL || '';
   const inviteLink = `${siteUrl}/e/${event.id}?invite=${attendee.invite_token}`;
 
   try {

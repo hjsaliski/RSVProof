@@ -138,9 +138,7 @@ export async function POST(request) {
         dateStyle: 'medium',
         timeStyle: 'short',
       });
-      const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
-        ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
-        : '';
+      const siteUrl = process.env.SITE_URL || '';
       const cancelLink = `${siteUrl}/cancel/${cancelToken}`;
 
       await resend.emails.send({

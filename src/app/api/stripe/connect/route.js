@@ -43,9 +43,7 @@ export async function POST(request) {
       .upsert({ id: user.id, stripe_account_id: accountId }, { onConflict: 'id' });
   }
 
-  const siteUrl = process.env.EVENTBRITE_REDIRECT_URI
-    ? new URL(process.env.EVENTBRITE_REDIRECT_URI).origin
-    : '';
+  const siteUrl = process.env.SITE_URL || '';
 
   // refresh_url: Stripe sends the organizer's browser here if the
   // onboarding link itself expired or was invalid, before they finished.

@@ -1,11 +1,12 @@
 export default function TermsPage() {
   return (
     <main className="flex-1 max-w-2xl mx-auto w-full px-6 py-12">
+      <a href="/" className="text-sm text-ink-soft underline mb-6 inline-block">← Back to RSVproof</a>
       <p className="eyebrow mb-1">Legal</p>
       <h1 className="font-display text-3xl mb-8">Terms of Service</h1>
 
       <div className="space-y-6 text-sm text-ink-soft leading-relaxed">
-        <p>Last updated: [DATE]</p>
+        <p>Last updated: July 17, 2026</p>
 
         <section>
           <h2 className="font-medium text-ink mb-2">What RSVproof does</h2>
@@ -73,9 +74,16 @@ export default function TermsPage() {
 
         <section>
           <h2 className="font-medium text-ink mb-2">Contact</h2>
-          <p>Questions about these terms can be directed to [CONTACT EMAIL].</p>
+          <p>
+            Questions about these terms can be directed to{' '}
+            <a href="mailto:info@rsvproof.com" className="underline">info@rsvproof.com</a>.
+          </p>
         </section>
       </div>
+
+      <p className="text-sm mt-10">
+        <a href="/privacy" className="underline">Privacy Policy</a>
+      </p>
     </main>
   );
 }
