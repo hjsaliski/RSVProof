@@ -182,7 +182,12 @@ function AttendeeSignupPageInner() {
           <p className="eyebrow mb-2">Reservation</p>
           <h1 className="font-display text-2xl mb-1">{event.name}</h1>
           <p className="text-sm text-ink-soft">
-            {new Date(event.event_date).toLocaleString()}
+            {new Date(event.event_date).toLocaleString('en-US', {
+              month: 'numeric', day: 'numeric', year: 'numeric',
+              hour: 'numeric', minute: '2-digit',
+              timeZone: event.event_timezone || 'America/Chicago',
+              timeZoneName: 'short',
+            })}
           </p>
           <p className="text-sm text-ink-soft mb-3">{event.location}</p>
           {event.description && <p className="text-sm">{event.description}</p>}

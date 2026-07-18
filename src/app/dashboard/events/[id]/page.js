@@ -527,7 +527,12 @@ export default function EventDetailPage() {
       <p className="eyebrow mt-4 mb-1">Event</p>
       <h1 className="font-display text-3xl mb-1">{event.name}</h1>
       <p className="text-sm text-ink-soft mb-8">
-        {new Date(event.event_date).toLocaleString()} &middot; {event.location}
+        {new Date(event.event_date).toLocaleString('en-US', {
+          month: 'numeric', day: 'numeric', year: 'numeric',
+          hour: 'numeric', minute: '2-digit',
+          timeZone: event.event_timezone || 'America/Chicago',
+          timeZoneName: 'short',
+        })} &middot; {event.location}
       </p>
 
       {(failedChargeCount > 0 || disputeCount > 0) && (
@@ -734,7 +739,14 @@ export default function EventDetailPage() {
                   className="field font-mono text-xs px-2 py-1 w-auto"
                 />
               ) : (
-                <span className="font-mono font-medium">{new Date(event.checkin_cutoff).toLocaleString()}</span>
+                <span className="font-mono font-medium">
+                  {new Date(event.checkin_cutoff).toLocaleString('en-US', {
+                    month: 'numeric', day: 'numeric', year: 'numeric',
+                    hour: 'numeric', minute: '2-digit',
+                    timeZone: event.event_timezone || 'America/Chicago',
+                    timeZoneName: 'short',
+                  })}
+                </span>
               )}
             </div>
             <div className="flex items-center justify-between border-t border-line pt-3">
@@ -1058,7 +1070,12 @@ export default function EventDetailPage() {
                 </button>
                 {event.status === 'active' && new Date() < new Date(event.checkin_cutoff) && (
                   <p className="text-xs text-ink-soft mt-2">
-                    Available once the check-in cutoff passes, {new Date(event.checkin_cutoff).toLocaleString()}.
+                    Available once the check-in cutoff passes, {new Date(event.checkin_cutoff).toLocaleString('en-US', {
+                      month: 'numeric', day: 'numeric', year: 'numeric',
+                      hour: 'numeric', minute: '2-digit',
+                      timeZone: event.event_timezone || 'America/Chicago',
+                      timeZoneName: 'short',
+                    })}.
                   </p>
                 )}
                 {chargeResult && (

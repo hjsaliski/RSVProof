@@ -191,7 +191,12 @@ export default function DashboardPage() {
                   </span>
                 </div>
                 <p className="text-sm text-ink-soft mt-1">
-                  {new Date(event.event_date).toLocaleString()}
+                  {new Date(event.event_date).toLocaleString('en-US', {
+                    month: 'numeric', day: 'numeric', year: 'numeric',
+                    hour: 'numeric', minute: '2-digit',
+                    timeZone: event.event_timezone || 'America/Chicago',
+                    timeZoneName: 'short',
+                  })}
                 </p>
               </div>
               <div className="text-right">
