@@ -83,6 +83,8 @@ export default function PrivacyPage() {
 
       <p className="text-sm mt-10">
         <a href="/terms" className="underline">Terms of Service</a>
+        {' '}&middot;{' '}
+        <a href="/refund-policy" className="underline">Refund Policy</a>
       </p>
     </main>
   );

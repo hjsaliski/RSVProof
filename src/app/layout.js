@@ -14,6 +14,7 @@ export default function RootLayout({ children }) {
         <footer className="py-6 px-6 text-center text-xs text-ink-soft border-t border-line">
           <a href="/terms" className="underline mr-4">Terms of Service</a>
           <a href="/privacy" className="underline mr-4">Privacy Policy</a>
+          <a href="/refund-policy" className="underline mr-4">Refund Policy</a>
           <a href="mailto:info@rsvproof.com" className="underline">Contact us</a>
         </footer>
         <Analytics />

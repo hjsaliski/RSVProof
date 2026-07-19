@@ -165,6 +165,7 @@ export async function POST(request) {
                 <img src="${qrImageUrl}" alt="Your check-in QR code" width="220" height="220" style="display: block; margin: 0 auto 16px; border-radius: 8px;" />
                 <p style="font-size: 12px; color: #a39d8c; margin: 0;">
                   Can't make it? <a href="${cancelLink}" style="color: #a39d8c;">Cancel your deposit</a>
+                  &middot; <a href="${siteUrl}/refund-policy" style="color: #a39d8c;">Refund policy</a>
                 </p>
               </div>
             </div>

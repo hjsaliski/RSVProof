@@ -83,6 +83,8 @@ export default function TermsPage() {
 
       <p className="text-sm mt-10">
         <a href="/privacy" className="underline">Privacy Policy</a>
+        {' '}&middot;{' '}
+        <a href="/refund-policy" className="underline">Refund Policy</a>
       </p>
     </main>
   );
