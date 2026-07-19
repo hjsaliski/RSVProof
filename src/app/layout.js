@@ -15,7 +15,6 @@ export default function RootLayout({ children }) {
           <a href="/terms" className="underline mr-4">Terms of Service</a>
           <a href="/privacy" className="underline mr-4">Privacy Policy</a>
           <a href="mailto:info@rsvproof.com" className="underline">Contact us</a>
-          {' '}(info@rsvproof.com)
         </footer>
         <Analytics />
       </body>
