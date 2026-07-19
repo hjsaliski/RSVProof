@@ -26,5 +26,6 @@ export default function robots() {
         '/forgot-password',
       ],
     },
+    sitemap: 'https://www.rsvproof.com/sitemap.xml',
   };
 }
