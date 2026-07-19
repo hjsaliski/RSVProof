@@ -41,7 +41,7 @@ function AttendeeSignupPageInner() {
   const [step, setStep] = useState('form'); // form | payment | done
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [clientSecret, setClientSecret] = useState('');
   const [stripePromise, setStripePromise] = useState(null);
   const [qrDataUrl, setQrDataUrl] = useState('');
@@ -64,6 +64,7 @@ function AttendeeSignupPageInner() {
         if (data.name) {
           setName(data.name);
           setEmail(data.email || '');
+          setConfirmEmail(data.email || '');
           setInvited(true);
         }
       })
@@ -73,12 +74,23 @@ function AttendeeSignupPageInner() {
   async function handleContinue(e) {
     e.preventDefault();
     setError('');
+
+    // The QR code and every downstream email go to whatever's typed
+    // here, so a typo has real consequences (a stranger gets someone
+    // else's ticket, or the real attendee never hears back). Confirming
+    // it catches that before a SetupIntent and Stripe customer even get
+    // created for the wrong address.
+    if (email !== confirmEmail) {
+      setError('Those emails don\'t match.');
+      return;
+    }
+
     setLoading(true);
 
     const res = await fetch('/api/create-setup-intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId: id, name, email, phone }),
+      body: JSON.stringify({ eventId: id, name, email }),
     });
     const json = await res.json();
     setLoading(false);
@@ -109,7 +121,7 @@ function AttendeeSignupPageInner() {
     const res = await fetch('/api/complete-signup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId: id, setupIntentId, name, email, phone, inviteToken }),
+      body: JSON.stringify({ eventId: id, setupIntentId, name, email, inviteToken }),
     });
     const json = await res.json();
     setLoading(false);
@@ -242,20 +254,25 @@ function AttendeeSignupPageInner() {
                     <label className="block text-sm font-medium mb-1">Email</label>
                     <input
                       type="email"
+                      required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="field w-full px-3 py-2"
                       disabled={invited}
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Phone</label>
-                    <input
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="field w-full px-3 py-2"
-                    />
-                  </div>
+                  {!invited && (
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Confirm email</label>
+                      <input
+                        type="email"
+                        required
+                        value={confirmEmail}
+                        onChange={(e) => setConfirmEmail(e.target.value)}
+                        className="field w-full px-3 py-2"
+                      />
+                    </div>
+                  )}
                   {error && <p className="text-clay text-sm">{error}</p>}
                   <button
                     type="submit"
