@@ -40,6 +40,7 @@ function AttendeeSignupPageInner() {
   const [event, setEvent] = useState(null);
   const [step, setStep] = useState('form'); // form | payment | done
   const [name, setName] = useState('');
+  const [website, setWebsite] = useState(''); // honeypot, real attendees never see this field
   const [email, setEmail] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
   const [clientSecret, setClientSecret] = useState('');
@@ -90,7 +91,7 @@ function AttendeeSignupPageInner() {
     const res = await fetch('/api/create-setup-intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId: id, name, email }),
+      body: JSON.stringify({ eventId: id, name, email, website }),
     });
     const json = await res.json();
     setLoading(false);
@@ -241,6 +242,20 @@ function AttendeeSignupPageInner() {
 
               {step === 'form' && (
                 <form onSubmit={handleContinue} className="space-y-4">
+                  {/* Honeypot: off-screen, not display:none (some bots specifically
+                      skip display:none), real attendees never see or reach it. */}
+                  <div style={{ position: 'absolute', left: '-9999px', top: 'auto', width: 1, height: 1, overflow: 'hidden' }} aria-hidden="true">
+                    <label htmlFor="website">Website</label>
+                    <input
+                      id="website"
+                      name="website"
+                      type="text"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                    />
+                  </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Name</label>
                     <input

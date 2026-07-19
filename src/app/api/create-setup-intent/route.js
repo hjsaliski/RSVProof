@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { getOrganizerStripeContext } from '@/lib/getOrganizerStripeContext';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 // Called before the attendee enters their card. Creates a Stripe Customer
 // and a SetupIntent so we can save the card without charging it yet.
@@ -14,10 +15,31 @@ import { getOrganizerStripeContext } from '@/lib/getOrganizerStripeContext';
 // using that exact same account context every time, not just at signup.
 export async function POST(request) {
   const body = await request.json();
-  const { eventId, name, email, phone } = body;
+  const { eventId, name, email, phone, website } = body;
+
+  // Honeypot: a hidden field real attendees never see or fill in, but
+  // basic bots that auto-fill every input on a form typically do. Silently
+  // reject rather than a visible 400, no reason to tell a bot it found
+  // the trap.
+  if (website) {
+    return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 400 });
+  }
 
   if (!eventId || !name) {
     return NextResponse.json({ error: 'Missing eventId or name' }, { status: 400 });
+  }
+
+  // Caps how many Stripe Customers one IP can create in a short window.
+  // Doesn't block legitimate repeat visits (5 in 10 minutes is generous
+  // for one person retrying a signup), but stops a script from hammering
+  // this endpoint and running up Stripe object counts or API usage.
+  const ip = getClientIp(request);
+  const { limited } = await checkRateLimit(`create-setup-intent:${ip}`, 5, 10);
+  if (limited) {
+    return NextResponse.json(
+      { error: 'Too many attempts. Please wait a few minutes and try again.' },
+      { status: 429 }
+    );
   }
 
   const { data: event, error: eventError } = await supabaseAdmin
